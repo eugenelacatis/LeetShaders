@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Challenge } from '../judge/types';
+import type { Challenge, JudgeResult } from '../judge/types';
 import { supabase } from './supabase';
 import { LOCAL_CHALLENGES } from './localChallenges';
 
@@ -120,12 +120,31 @@ export function useChallenge(slug: string): UseChallengeResult {
   return { data, loading };
 }
 
-export async function submitSolve(challengeId: string, score: number, shaderSrc: string): Promise<void> {
-  if (!SUPABASE_CONFIGURED) return;
+export type SolveSaveStatus = 'saved' | 'signed-out' | 'not-configured';
+
+/**
+ * Records a passing submission in `solves` (see supabase/migrations). RLS
+ * only accepts rows for the signed-in user, so a signed-out user is a
+ * normal outcome, not an error. Throws only when the insert itself fails.
+ */
+export async function submitSolve(
+  challengeId: string,
+  result: JudgeResult,
+  shaderSrc: string,
+): Promise<SolveSaveStatus> {
+  if (!SUPABASE_CONFIGURED) return 'not-configured';
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return 'signed-out';
+
   const { error } = await supabase.from('solves').insert({
+    user_id: auth.user.id,
     challenge_id: challengeId,
-    score,
-    shader_src: shaderSrc,
+    final_score: result.finalScore,
+    mae_score: result.maeScore,
+    llm_score: result.llmScore,
+    submitted_shader_src: shaderSrc,
+    passed: result.passed,
   });
   if (error) throw new Error(error.message);
+  return 'saved';
 }

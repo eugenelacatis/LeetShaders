@@ -7,14 +7,19 @@ dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+// The challenges table is read-only under RLS (supabase/migrations), so
+// seeding needs the service-role key, which bypasses RLS. Server-side only:
+// never give it a VITE_ prefix or ship it to the browser.
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env');
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error('Missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local');
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { persistSession: false },
+});
 
 const CHALLENGES_DIR = './src/challenges';
 

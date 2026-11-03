@@ -257,7 +257,7 @@ export default function ChallengePage() {
 
       if (judgeResult.passed) {
         try {
-          await submitSolve(challenge.id, judgeResult.finalScore, src);
+          await submitSolve(challenge.id, judgeResult, src);
         } catch (err) {
           // The pass already shows in the result panel; tell the user the
           // solve record (leaderboard / solved badge) didn't save.
