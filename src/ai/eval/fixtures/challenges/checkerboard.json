@@ -1,0 +1,9 @@
+{
+  "id": "checkerboard",
+  "slug": "checkerboard",
+  "title": "Grandmaster's Grid",
+  "description": "Render a standard 8x8 black and white checkerboard pattern. The bottom-left square should be black.",
+  "difficulty": "beginner",
+  "tolerance": 4,
+  "useBlur": false
+}

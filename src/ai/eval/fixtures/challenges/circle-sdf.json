@@ -1,0 +1,9 @@
+{
+  "id": "circle-sdf",
+  "slug": "circle-sdf",
+  "title": "Zen Dot",
+  "description": "Render a perfectly centered, white circle on a black background. The circle should have a radius of 0.5 in screen-space and smooth, anti-aliased edges.",
+  "difficulty": "beginner",
+  "tolerance": 10,
+  "useBlur": true
+}

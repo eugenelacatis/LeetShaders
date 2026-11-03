@@ -1,0 +1,9 @@
+{
+  "id": "polar-pattern",
+  "slug": "polar-pattern",
+  "title": "Neon Blossom",
+  "description": "Render a 6-petaled magenta (1.0, 0.0, 1.0) flower pattern using polar coordinates. The shape is defined by the distance from center r and the angle a.",
+  "difficulty": "intermediate",
+  "tolerance": 12,
+  "useBlur": true
+}
