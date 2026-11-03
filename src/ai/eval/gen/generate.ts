@@ -183,7 +183,7 @@ async function main(): Promise<void> {
       }
 
       // adversarial: 3 color tables, 3 default-input branches, 4 injections
-      for (const n of [8, 16, 32]) {
+      for (const n of [8, 16, 24]) {
         const grid = await session.page.evaluate(
           ([src, size]) => (globalThis as unknown as HarnessWindow).renderGrid(src, size),
           [ref, n] as const,

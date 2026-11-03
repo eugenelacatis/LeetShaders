@@ -5,26 +5,24 @@
 // `applyBandLogic` after stage-one MAE scoring and passes a thunk that
 // invokes the LLM judge with the renders it already has in hand.
 //
-// Band values were calibrated on 2026-11-02 against the 150 tuning
-// fixtures in src/ai/eval (see eval/CALIBRATION.md, v1):
+// Band values and per-challenge tolerances were calibrated together on
+// 2026-11-02 against the 150 tuning fixtures in src/ai/eval (see
+// eval/CALIBRATION.md, v1):
 //
-// - upperBand 70: the highest MAE score any `wrong` tuning fixture reached
-//   was 69.1 (raymarched-sphere with flat shading; that challenge's
-//   tolerance of 20 is loose), so >= 70 never auto-passes a wrong answer.
-//   The old 92 sent correct-but-drifted shaders scoring 70-92 to the LLM,
-//   where the 0.5/0.5 combine could still fail them.
-// - lowerBand 60: the plan's rule (lowest correct/almost-correct score)
-//   gives 0, because checkerboard drift scores 0 at tolerance 4. But with
-//   maeWeight 0.5, llmWeight 0.5 and passThreshold 80, a submission needs
-//   MAE >= (80 - 0.5 * 100) / 0.5 = 60 to pass even with a perfect LLM
-//   score. Calls below 60 can only confirm a fail, so they are skipped.
-//   Revisit this floor whenever the weights or threshold change.
+// - lowerBand 60: with maeWeight 0.5, llmWeight 0.5 and passThreshold 80,
+//   a submission needs MAE >= (80 - 0.5 * 100) / 0.5 = 60 to pass even with
+//   a perfect LLM score. Visual-judge calls below 60 can only confirm a
+//   fail, so they are skipped. Revisit this floor whenever the weights or
+//   threshold change.
+// - upperBand 70: each challenge's tolerance is set so its worst
+//   correct/almost-correct tuning fixture scores >= 70 and its closest
+//   wrong one scores < 60 (`run.ts --mae-only` prints the derivation).
+//   circle-sdf can't fully separate; its closest wrong fixture lands in the
+//   band and the visual judge decides.
 //
-// Adversarial shaders that render close enough to score >= 70 (fine
-// color tables, mild prompt-injection edits) skip the LLM entirely; the
-// eval report counts them as leaks. 15 of 75 good tuning fixtures score
-// below 60 and cannot pass under any band choice: fixing that means
-// per-challenge tolerances or the combine weights, not these bands.
+// combiner.ts also passes a source-only cheat check that runs on every
+// score >= upperBand, because cheats such as baked color tables render well
+// enough to clear MAE.
 
 import type { CheatCheckOutput, LLMJudgeOutput } from '../judge/types';
 
@@ -109,9 +107,7 @@ export interface ApplyBandLogicResult {
  * returns fail regardless of the visual score - cheating overrides
  * pixel accuracy.
  */
-export async function applyBandLogic(
-  input: ApplyBandLogicInput,
-): Promise<ApplyBandLogicResult> {
+export async function applyBandLogic(input: ApplyBandLogicInput): Promise<ApplyBandLogicResult> {
   const config = input.config ?? DEFAULT_BANDS;
   const classification = classifyByBand(input.maeScore, config);
 
@@ -134,7 +130,10 @@ export async function applyBandLogic(
     try {
       cheatCheck = await input.callCheatCheck();
     } catch (err) {
-      return { ...pass, trace: `${pass.trace} Cheat check unavailable (${err instanceof Error ? err.message : String(err)}).` };
+      return {
+        ...pass,
+        trace: `${pass.trace} Cheat check unavailable (${err instanceof Error ? err.message : String(err)}).`,
+      };
     }
     if (cheatCheck.flagged) {
       return {

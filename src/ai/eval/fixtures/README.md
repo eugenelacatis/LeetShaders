@@ -16,6 +16,6 @@ fixtures/
 
 A fixture's key is `<category>/<slug>-<label>`. The challenge is the longest slug that prefixes the file name.
 
-Each harness run writes `<fixture>.png` (the user render at default uniforms) next to the fixture and `challenges/<slug>.png` for the reference. They are gitignored and vertically flipped (see `../CALIBRATION.md`).
+Each harness run writes `<fixture>.png` (the user render at default uniforms) next to the fixture and `challenges/<slug>.png` for the reference. They are gitignored.
 
 Methodology, expected outcomes, and band calibration are in `../CALIBRATION.md`.

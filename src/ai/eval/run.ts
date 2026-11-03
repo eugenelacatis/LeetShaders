@@ -358,6 +358,49 @@ function suggestBands(runs: FixtureRun[]): BandSuggestion {
   return { upperBand, lowerBand, note: notes.join(' '), leaks };
 }
 
+interface ToleranceSuggestion {
+  challengeId: string;
+  current: number;
+  suggested: number;
+  worstGoodRaw: number;
+  closestWrongRaw: number;
+  separable: boolean;
+}
+
+/**
+ * Per-challenge tolerance from raw MAE, given the bands. score = 100 * (1 - raw / tol), so:
+ *   worst good fixture scores >= upperBand  needs  tol >= worstGood / (1 - upper / 100)
+ *   closest wrong fixture scores < lowerBand  needs  tol <  closestWrong / (1 - lower / 100)
+ * When both hold, take the geometric middle of the range. When they can't
+ * both hold, take the lower bound: good fixtures still pass outright and the
+ * closest wrong ones land in the band, where the visual judge decides.
+ */
+function suggestTolerances(runs: FixtureRun[], challenges: Map<string, Challenge>): ToleranceSuggestion[] {
+  const { upperBand, lowerBand } = DEFAULT_BANDS;
+  const out: ToleranceSuggestion[] = [];
+  for (const [id, challenge] of challenges) {
+    const mine = runs.filter((r) => r.fixture.challengeId === id);
+    const good = mine.filter((r) => r.expected.shouldPass).map((r) => r.result.breakdown.maeRaw);
+    const wrong = mine.filter((r) => r.fixture.verdict === 'wrong').map((r) => r.result.breakdown.maeRaw);
+    if (good.length === 0 || wrong.length === 0) continue;
+    const worstGoodRaw = Math.max(...good);
+    const closestWrongRaw = Math.min(...wrong);
+    const lo = worstGoodRaw / (1 - upperBand / 100);
+    const hi = closestWrongRaw / (1 - lowerBand / 100);
+    const separable = lo < hi;
+    const raw = separable ? Math.sqrt(lo * hi) : lo;
+    out.push({
+      challengeId: id,
+      current: challenge.tolerance,
+      suggested: Math.ceil(raw * 10) / 10,
+      worstGoodRaw,
+      closestWrongRaw,
+      separable,
+    });
+  }
+  return out;
+}
+
 // ─── Live report ──────────────────────────────────────────────────────────────
 
 function pct(n: number, d: number): string {
@@ -585,6 +628,12 @@ async function main(): Promise<void> {
     console.log(
       `  with suggested bands: ${inBand} visual judge calls`,
     );
+    console.log(`\nTolerances (worst good raw MAE -> >= upperBand, closest wrong -> < lowerBand):`);
+    for (const t of suggestTolerances(runs, challenges)) {
+      console.log(
+        `  ${t.challengeId.padEnd(18)} current ${String(t.current).padStart(5)}  suggested ${String(t.suggested).padStart(6)}  (good max ${t.worstGoodRaw.toFixed(2)}, wrong min ${t.closestWrongRaw.toFixed(2)}${t.separable ? '' : ', not separable: closest wrong goes to the visual judge'})`,
+      );
+    }
     console.log(
       `  adversarial at/above upperBand (only the cheat check reads them): ${bands.leaks.map((r) => r.fixture.key).join(', ') || 'none'}`,
     );

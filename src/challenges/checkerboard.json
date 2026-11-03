@@ -4,7 +4,7 @@
   "title": "Grandmaster's Grid",
   "description": "Render a standard 8x8 black and white checkerboard pattern. The bottom-left square should be black.",
   "difficulty": "beginner",
-  "tolerance": 4.0,
+  "tolerance": 104.6,
   "useBlur": false,
   "hintText": "Scale your UV coordinates by 8.0, then use floor() to get integer grid cells. The parity (odd/even) of the sum of x and y will give you the checkerboard pattern."
 }

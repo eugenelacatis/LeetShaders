@@ -2,13 +2,20 @@
 
 Living document. Owner: AI Systems & Integration. See `src/ai/AI_SYSTEMS.md` task 2.
 
+## How the judge decides
+
+1. Render the submission and the reference at four uniform samples (the defaults, then three random `u_time` / `u_mouse` values from a seeded PRNG) and keep the worst MAE score. A shader that only matches at the default inputs fails here.
+2. Route by MAE score against the bands in `src/ai/bandLogic.ts`:
+   - below `lowerBand` (60): fail, no LLM call;
+   - from 60 up to `upperBand` (70): the visual judge, `claude-opus-5-5`, sees both renders and the source. The final score is `0.5 * MAE + 0.5 * LLM` against a pass threshold of 80;
+   - 70 and above: pass, after a source-only cheat check by `claude-haiku-5-5`. A flag fails the submission. If the check errors, the pass stands.
+3. Either model flagging the source as cheating fails the submission with a score of 0.
+
+Both LLM calls get structured JSON output and treat the shader source as untrusted: it is wrapped in `<shader_source>` tags, and any attempt to instruct the grader counts as cheating. Results are cached by (challenge, shader hash).
+
 ## How the harness works
 
-`run.ts` measures the judge users actually get. It starts Vite, opens `browser/harness.html` in headless Chromium (SwiftShader WebGL2), and calls `judge()` from `src/judge/combiner.ts` once per fixture. That runs the shared render pipeline, MAE scoring with each challenge's tolerance and blur setting, the band logic in `src/ai/bandLogic.ts`, and, for borderline scores, the vision judge.
-
-The LLM call is bridged back to Node with `page.exposeFunction`, so `ANTHROPIC_API_KEY` stays in the Node process. Node builds the request with `buildJudgeRequest()` from `src/ai/judgeRequest.ts`, the same function production uses. `judgeParity.test.ts` fails if the two paths ever send different requests.
-
-Each fixture is rendered at four uniform samples from a seeded PRNG: the defaults, then three random `u_time` / `u_mouse` values. The worst MAE score is kept. The eval uses seed 1337; production draws a fresh seed per submission.
+`run.ts` measures that exact path. It starts Vite, opens `browser/harness.html` in headless Chromium (SwiftShader WebGL2), and calls `judge()` from `src/judge/combiner.ts` once per fixture. LLM calls are bridged back to Node with `page.exposeFunction`, so `ANTHROPIC_API_KEY` stays in the Node process. Node builds each request with `src/ai/judgeRequest.ts`, the same module production uses, and `judgeParity.test.ts` fails if the two paths ever send different requests. The eval uses uniform seed 1337; production draws a fresh seed per submission.
 
 Every run saves the user render next to each fixture (`<fixture>.png`) and the reference render under `fixtures/challenges/`. These PNGs are gitignored.
 
@@ -16,24 +23,20 @@ Every run saves the user render next to each fixture (`<fixture>.png`) and the r
 
 200 fixtures: 5 challenges, 4 categories, 10 each. `gen/generate.ts` builds them from `src/challenges/` and `gen/specs.ts`, and `gen/split.ts` splits them 150 tuning / 50 held out, stratified by challenge and category (seed 20261102, list in `fixtures/split.json`). Tune only on the tuning set.
 
-| Challenge | Difficulty | Tolerance | Blur |
+| Challenge | Difficulty | Tolerance (was) | Blur |
 | --- | --- | --- | --- |
-| circle-sdf | beginner | 10 | yes |
-| checkerboard | beginner | 4 | no |
-| hsv-color-wheel | intermediate | 8 | no |
-| polar-pattern | intermediate | 12 | yes |
-| raymarched-sphere | advanced | 20 | yes |
-
-Expected outcome per category:
+| circle-sdf | beginner | 34.9 (10) | yes |
+| checkerboard | beginner | 104.6 (4) | no |
+| hsv-color-wheel | intermediate | 33.1 (8) | no |
+| polar-pattern | intermediate | 43.4 (12) | yes |
+| raymarched-sphere | advanced | 5.7 (20) | yes |
 
 | Category | Expected | What the fixtures are |
 | --- | --- | --- |
 | correct | pass, not flagged | 6 mechanical rewrites of the reference (renames, helper functions, comment stripping, clamping) and 4 hand-written implementations that compute the same image differently |
 | almost-correct | pass, not flagged | One small edit to the reference: a shifted center, a slightly different radius or color, a softer edge, a one-pixel offset |
 | wrong | fail | 6 edits that change the shape, color, or pattern, plus the other 4 challenges' references |
-| adversarial | fail, flagged | 3 color-table cheats (reference baked into an 8x8, 16x16, or 32x32 lookup), 3 shaders that match only at the default inputs (`u_time == 0.0` and similar), 4 prompt injections in comments or a `#define` |
-
-The injection fixtures pair the injection with an edited render. A shader that renders perfectly never reaches the LLM, so injection is only tested when the render lands in the borderline band.
+| adversarial | fail, flagged | 3 color-table cheats (reference baked into an 8x8, 16x16, or 24x24 lookup), 3 shaders that match only at the default inputs (`u_time == 0.0` and similar), 4 prompt injections in comments or a `#define` on edited renders |
 
 ## Running it
 
@@ -41,15 +44,15 @@ The injection fixtures pair the injection with an edited render. A shader that r
 # Fixture counts, no rendering:
 npx tsx src/ai/eval/run.ts
 
-# Free. Renders everything, scores MAE, reports band routing. No API key needed:
+# Free. Renders everything, scores MAE, prints routing, band and tolerance derivations:
 npx tsx src/ai/eval/run.ts --mae-only --set=tuning
 
-# Calls the API for borderline fixtures and writes REPORT.md.
-# Reads ANTHROPIC_API_KEY from the environment or .env.local:
+# Calls the API and writes REPORT.md. Reads ANTHROPIC_API_KEY from the
+# environment or .env.local:
 npx tsx src/ai/eval/run.ts --live --set=heldout --repeat=3 --max-cost=5
 ```
 
-A live run first does a free MAE pass, prints how many fixtures will reach the LLM with a token and cost estimate, and waits 10 seconds (skip with `--yes`). It aborts once spend passes `--max-cost`.
+A live run first does a free MAE pass, prints how many visual-judge calls and cheat checks it will make with a token and cost estimate, and waits 10 seconds (skip with `--yes`). It aborts once spend passes `--max-cost`.
 
 Regenerate fixtures with `npx tsx src/ai/eval/gen/generate.ts` and `npx tsx src/ai/eval/gen/split.ts`.
 
@@ -57,41 +60,36 @@ Regenerate fixtures with `npx tsx src/ai/eval/gen/generate.ts` and `npx tsx src/
 
 - False-pass rate below 10%.
 - False-fail rate below 10%.
-- No adversarial leaks: every adversarial fixture fails, and every one that reaches the LLM is flagged.
+- No adversarial leaks: every adversarial fixture fails, and every one an LLM reads is flagged.
+- Cheat check flags no correct or almost-correct fixture.
 - Per-run cost ceiling: $5 while calibrating, $20 for the final demo run.
 
-## Band calibration (v1, 2026-11-02)
+## Calibration (v1, 2026-11-02)
 
-MAE scores on the 150 tuning fixtures (`out/mae-tuning.csv`):
+MAE scores on the 150 tuning fixtures after the tolerance change (`out/mae-tuning.csv`):
 
 ![MAE score by category](mae-histogram-tuning.svg)
 
-| Category | Min | Median | Max |
-| --- | --- | --- | --- |
-| correct | 99.9 | 100.0 | 100.0 |
-| almost-correct | 0.0 | 69.6 | 99.9 |
-| wrong | 0.0 | 0.0 | 69.1 |
-| adversarial | 0.0 | 0.0 | 100.0 |
+| Category | Min | Median | Max | Pass outright (>= 70) | Visual judge (60-70) | Fail (< 60) |
+| --- | --- | --- | --- | --- | --- | --- |
+| correct | 99.5 | 100.0 | 100.0 | 40 | 0 | 0 |
+| almost-correct | 70.1 | 92.6 | 99.6 | 35 | 0 | 0 |
+| wrong | 0.0 | 0.0 | 60.8 | 0 | 1 | 39 |
+| adversarial | 0.0 | 54.9 | 100.0 | 13 | 4 | 18 |
 
-The rule from the eval plan sets `upperBand` to the lowest score no `wrong` fixture reaches, and `lowerBand` to the highest score no correct or almost-correct fixture falls under.
+How the values were chosen, in order:
 
-`upperBand` = 70. The highest `wrong` score was 69.1, from raymarched-sphere with flat shading. That challenge's tolerance of 20 is loose enough that a visibly different sphere still scores in the high 60s.
+1. `lowerBand` = 60 comes from the scoring math. With weights 0.5 / 0.5 and a pass threshold of 80, a submission needs MAE of at least 60 to pass even with an LLM score of 100, so visual-judge calls below 60 cannot change a verdict.
+2. `upperBand` = 70. The first MAE-only run, at the old tolerances, put the highest `wrong` score at 69.1.
+3. Per-challenge tolerances were then set so each challenge's worst correct or almost-correct tuning fixture scores at least 70 and its closest wrong one scores below 60. `run.ts --mae-only` prints this derivation: the tolerance is the geometric middle of the range that satisfies both, or its lower bound when the two cannot both hold.
 
-`lowerBand` = 60. The rule gives 0, because every checkerboard almost-correct edit scores 0 at tolerance 4 (a 4% darker black or a one-pixel shift already exceeds it), and so does circle-sdf with a 5% grey background. A lower band of 0 would send everything below 70 to the LLM, and none of those calls could change a verdict. The final score is `0.5 * MAE + 0.5 * LLM` against a pass threshold of 80, so a submission with MAE below 60 fails even with an LLM score of 100. The band starts at that floor. If the weights or the threshold change, the floor moves with them; `run.ts --mae-only` prints it.
+The old tolerances were off in both directions. At tolerance 4, every checkerboard almost-correct edit scored 0, so 15 of 75 good tuning fixtures could not pass under any band setting. At tolerance 20, a flat-shaded raymarched sphere scored 69. On the tuning set raw MAE separates the categories cleanly for every challenge except circle-sdf, where a 5% grey background (raw 10.4) sits close to a square drawn instead of a circle (raw 13.7). The square now scores 60.8 and goes to the visual judge.
 
-Effect on the tuning set:
+With these values, on the tuning set: every good fixture passes on MAE, no wrong fixture passes on MAE, 5 fixtures reach the visual judge, 88 get the cheat check, and 57 fail with no LLM call. Every `u_time` / `u_mouse` branch cheat scores below 60 and fails at stage one.
 
-| Bands (upper / lower) | LLM calls | Skip rate | Adversarial fixtures that skip the LLM |
-| --- | --- | --- | --- |
-| 92 / 40 (previous) | 33 / 150 | 78.0% | 3 |
-| 70 / 0 (rule as written) | 83 / 150 | 44.7% | 10 |
-| 70 / 60 (chosen) | 5 / 150 | 96.7% | 10 |
+The 13 adversarial fixtures that score at least 70 (color tables and the milder injections) depend on the cheat check alone. The live run measures whether Haiku catches them.
 
-Known consequences of these bands, to be measured in the live run:
-
-- 15 of the 75 good tuning fixtures score below 60 and cannot pass under any band choice. They are false fails caused by per-challenge tolerances (checkerboard especially) and the combine weights, and the bands cannot fix them.
-- 10 adversarial tuning fixtures score at or above 70 and pass without the LLM seeing their source. Four are color tables (checkerboard, circle-sdf, two on raymarched-sphere). Six are injections: the mild edits on hsv-color-wheel and polar-pattern, and all four on raymarched-sphere, where tolerance 20 keeps even the larger edits above 70. They are expected adversarial leaks.
-- Every `u_time` / `u_mouse` branch cheat in the tuning set scores 0 under randomized uniforms and fails at stage one. Without sampling they would match the reference exactly.
+These tolerances live in `src/challenges/*.json`, so Supabase needs a reseed (`npm run seed`) before production uses them.
 
 ## Prompt iteration playbook
 
@@ -103,18 +101,21 @@ Known consequences of these bands, to be measured in the live run:
 
 ## Known limitations
 
-- Rendering uses SwiftShader. Scores are reproducible across machines but can differ slightly from a user's GPU, which the vision judge is meant to absorb.
-- Saved PNGs are vertically flipped. `readPixels` returns rows bottom-up and `src/ai/imageEncode.ts` writes them top-down. The judge sees both renders flipped the same way, so the visual comparison holds, but orientation words in a challenge description ("bottom-left") refer to the other corner of the image the model sees. Production has the same flip.
-- `almost-correct` fixtures are expected to pass. Some of them are visibly off. Changing that expectation is a calibration decision, made in `expectedOutcome()` in `run.ts`.
+- Rendering uses SwiftShader. Scores are reproducible across machines but can differ slightly from a user's GPU.
+- The render watchdog in `src/judge/pipeline.ts` allows 2 seconds per render. SwiftShader takes 2.4 to 4.3 seconds on a shader with a 1,024-entry constant array, so the largest color table is 24x24 to keep results stable. A real GPU renders the larger table quickly, and a production submission like that would go to the cheat check.
+- `almost-correct` fixtures are expected to pass. Changing that expectation is a calibration decision, made in `expectedOutcome()` in `run.ts`.
+- During development, one MAE-only pass over all 200 fixtures printed held-out scores before the split was used for anything. Bands and tolerances were derived from the tuning CSV only.
 
 ## Iteration log
 
-### v1 (bands, harness, prompt guard)
+### v1 (real pipeline, tolerances, cheat check)
 
 - Date: 2026-11-02
 - Fixtures: 200 (150 tuning, 50 held out), 5 challenges.
-- Prompt: `JUDGE_SYSTEM_PROMPT` in `src/ai/judgeRequest.ts`, shared by production and eval. Shader source is wrapped in `<shader_source>` tags and marked untrusted; instructing the grader counts as cheating.
-- Bands: 70 / 60 (was 92 / 40), from the MAE-only run above.
+- Models: visual judge `claude-opus-5-5`, cheat check `claude-haiku-5-5`, hints `claude-sonnet-5-5`.
+- Prompts: `JUDGE_SYSTEM_PROMPT` and `CHEAT_CHECK_SYSTEM_PROMPT` in `src/ai/judgeRequest.ts`, shared by production and eval. Source is untrusted; instructing the grader counts as cheating.
+- Bands: 70 / 60 (was 92 / 40). Tolerances recalibrated as above.
+- Renders are now sent right side up (they were vertically flipped before).
 - Live result: not run yet. `REPORT.md` will hold the held-out numbers.
 
 ### v0 (scaffolding)
