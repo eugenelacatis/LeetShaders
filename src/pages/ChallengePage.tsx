@@ -20,7 +20,7 @@ import ResultPanel from '../editor/ResultPanel';
 import type { ResultData } from '../editor/ResultPanel';
 import { useChallenge, submitSolve } from '../backend/useChallenges';
 import { judge } from '../judge/combiner';
-import { llmJudge } from '../judge/llm';
+import { llmJudge, llmCheatCheck } from '../judge/llm';
 import { computeMAEResult } from '../judge/mae';
 import { compileAndRender } from '../judge/pipeline';
 import { sampleUniforms, freshSeed } from '../judge/uniforms';
@@ -241,7 +241,7 @@ export default function ChallengePage() {
       const judgeResult = await judge(src, challenge, async (input) => {
         setSubmitStage('Running AI visual analysis...');
         return llmJudge(input);
-      }, DEFAULT_BANDS, sampleUniforms(freshSeed()));
+      }, DEFAULT_BANDS, sampleUniforms(freshSeed()), llmCheatCheck);
       setResultData({ kind: 'submit', result: judgeResult });
 
       const record: SubmissionRecord = {

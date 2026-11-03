@@ -18,8 +18,8 @@ Think LeetCode for shader graphics. The hard problem is the judge.
 | UI | Material UI v7.3.9 |
 | State | Zustand 5.0.5 |
 | Backend | Supabase, Auth plus Postgres |
-| AI judge | Anthropic Claude Opus 4.7 vision |
-| AI hints | Anthropic Claude Sonnet 4.6 |
+| AI judge | Anthropic Claude Opus 5.5 vision; Claude Haiku 5.5 source-only cheat check on MAE passes |
+| AI hints | Anthropic Claude Sonnet 5.5 |
 | Deployment | Vercel for frontend, Supabase hosted for backend |
 
 Do not introduce new libraries without team agreement. If a Claude Code session suggests adding a new dependency, push back and check with the team first.
@@ -108,7 +108,7 @@ src/
 - **One pipeline rule.** The live preview and the judge consume the same compile path. If Claude Code starts writing a second WebGL context manager, stop it.
 - **Lock the contract first.** The `Challenge` and `JudgeResult` types above are the integration seam. Do not let Claude Code drift them silently.
 - **Prefer scaffolding standalone.** When a module has a clear contract (judge, prompts, challenge files), build it in isolation with a test harness before integrating. This is faster than fighting React lifecycle while debugging WebGL or LLM calls.
-- **Verify model strings.** The current Anthropic models are `claude-opus-4-7` and `claude-sonnet-4-6`. Claude Code may suggest older model names from its training data. Override.
+- **Verify model strings.** The current Anthropic models are `claude-opus-5-5` (judge), `claude-sonnet-5-5` (hints), and `claude-haiku-5-5` (cheat check), defined once in `src/ai/models.ts`. Claude Code may suggest older model names from its training data. Override.
 - **Material UI v7 has API differences from v5.** Feed Claude Code the v7 docs URL when scaffolding components.
 - **Supabase RLS.** Do not skip row-level security. Even though scoring is client-side, solve records and user data need policies.
 

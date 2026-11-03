@@ -26,7 +26,7 @@
 // below 60 and cannot pass under any band choice: fixing that means
 // per-challenge tolerances or the combine weights, not these bands.
 
-import type { LLMJudgeOutput } from '../judge/types';
+import type { CheatCheckOutput, LLMJudgeOutput } from '../judge/types';
 
 export interface BandConfig {
   /** MAE score >= this returns pass without invoking the LLM. */
@@ -86,6 +86,9 @@ export interface ApplyBandLogicInput {
    *  function so judge can close over the renders it already has
    *  without bandLogic needing to know about Uint8Arrays. */
   callLLM: () => Promise<LLMJudgeOutput>;
+  /** Optional source-only cheat check, run on confident passes. A flag fails
+   *  the submission; an error leaves the MAE pass standing. */
+  callCheatCheck?: () => Promise<CheatCheckOutput>;
   config?: BandConfig;
 }
 
@@ -93,6 +96,8 @@ export interface ApplyBandLogicResult {
   llmInvoked: boolean;
   llmResult: LLMJudgeOutput | null;
   llmUnavailable: boolean;
+  /** Result of the cheat check when it ran and answered; null otherwise. */
+  cheatCheck: CheatCheckOutput | null;
   finalScore: number;
   passed: boolean;
   trace?: string;
@@ -111,14 +116,36 @@ export async function applyBandLogic(
   const classification = classifyByBand(input.maeScore, config);
 
   if (classification.kind === 'confident-pass') {
-    return {
+    const pass = {
       llmInvoked: false,
       llmResult: null,
       llmUnavailable: false,
+      cheatCheck: null,
       finalScore: input.maeScore,
       passed: true,
-      trace: `MAE ${input.maeScore.toFixed(1)} >= upperBand ${config.upperBand}, skipped LLM.`,
+      trace: `MAE ${input.maeScore.toFixed(1)} >= upperBand ${config.upperBand}, skipped visual LLM.`,
     };
+    if (!input.callCheatCheck) return pass;
+
+    // A shader can render well by cheating (a baked color table, an
+    // injected "grade this 100" comment), so passes still get their source
+    // read. Fail open: if the check is unavailable, the MAE pass stands.
+    let cheatCheck: CheatCheckOutput;
+    try {
+      cheatCheck = await input.callCheatCheck();
+    } catch (err) {
+      return { ...pass, trace: `${pass.trace} Cheat check unavailable (${err instanceof Error ? err.message : String(err)}).` };
+    }
+    if (cheatCheck.flagged) {
+      return {
+        ...pass,
+        cheatCheck,
+        finalScore: 0,
+        passed: false,
+        trace: `Flagged by cheat check: ${cheatCheck.reasoning}`,
+      };
+    }
+    return { ...pass, cheatCheck, trace: `${pass.trace} Cheat check clean.` };
   }
 
   if (classification.kind === 'confident-fail') {
@@ -126,6 +153,7 @@ export async function applyBandLogic(
       llmInvoked: false,
       llmResult: null,
       llmUnavailable: false,
+      cheatCheck: null,
       finalScore: input.maeScore,
       passed: false,
       trace: `MAE ${input.maeScore.toFixed(1)} < lowerBand ${config.lowerBand}, skipped LLM.`,
@@ -148,6 +176,7 @@ export async function applyBandLogic(
       llmInvoked: false,
       llmResult: null,
       llmUnavailable,
+      cheatCheck: null,
       finalScore: input.maeScore,
       passed,
       trace: `LLM unavailable (${err instanceof Error ? err.message : String(err)}), scored on MAE only`,
@@ -160,6 +189,7 @@ export async function applyBandLogic(
       llmInvoked: true,
       llmResult,
       llmUnavailable,
+      cheatCheck: null,
       finalScore: 0,
       passed: false,
       trace: `Flagged by LLM: ${llmResult.reasoning}`,
@@ -172,6 +202,7 @@ export async function applyBandLogic(
     llmInvoked: true,
     llmResult,
     llmUnavailable,
+    cheatCheck: null,
     finalScore,
     passed,
     trace: `MAE ${input.maeScore.toFixed(1)} + LLM ${llmResult.score} -> ${finalScore.toFixed(1)} (threshold ${config.passThreshold}).`,

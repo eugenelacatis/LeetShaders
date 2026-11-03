@@ -60,7 +60,7 @@ describe('llmJudge', () => {
     vi.unstubAllGlobals();
   });
 
-  it('POSTs to /api/anthropic with the correct model and tool schema', async () => {
+  it('POSTs to /api/anthropic with the judge model and JSON output schema', async () => {
     await llmJudge(BASE_INPUT);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -72,7 +72,8 @@ describe('llmJudge', () => {
     expect(body.model).toBe(JUDGE_MODEL);
     expect(body.system).toBe(JUDGE_SYSTEM_PROMPT);
     expect(body.jsonSchema).toBeDefined();
-    expect(body.jsonSchema.name).toBe('record_verdict');
+    expect(body.jsonSchema.name).toBe('judge_verdict');
+    expect(body.effort).toBe('medium');
   });
 
   it('sends both renders as base64 images in the content blocks', async () => {

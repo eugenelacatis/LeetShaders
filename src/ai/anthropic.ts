@@ -10,9 +10,9 @@
 // suggest older names from training data; override at call sites by
 // importing JUDGE_MODEL or HINT_MODEL.
 
-import type { AnthropicModel } from './models';
+import type { AnthropicModel, Effort } from './models';
 
-export { JUDGE_MODEL, HINT_MODEL, type AnthropicModel } from './models';
+export { JUDGE_MODEL, HINT_MODEL, CHEAT_CHECK_MODEL, type AnthropicModel } from './models';
 
 export interface TextContent {
   type: 'text';
@@ -29,11 +29,10 @@ export interface ImageContent {
 
 export type ContentBlock = TextContent | ImageContent;
 
-// Structured-output tool schema. Anthropic enforces JSON via a forced
-// tool call, see https://docs.anthropic.com/claude/docs/tool-use.
+// Structured output: when set, the proxy asks for JSON matching `schema`
+// (output_config.format) and returns it parsed.
 export interface JsonSchemaTool {
   name: string;
-  description: string;
   schema: Record<string, unknown>;
 }
 
@@ -42,6 +41,8 @@ export interface AnthropicCallInput {
   system: string;
   userContent: ContentBlock[];
   maxTokens: number;
+  /** output_config.effort. These models always think; effort sets how much. */
+  effort?: Effort;
   jsonSchema?: JsonSchemaTool;
   timeoutMs?: number;
 }

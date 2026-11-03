@@ -1,17 +1,18 @@
 // AI Systems & Integration. Node-side Anthropic call for the eval
-// harness. Mirrors the shape of src/ai/anthropic.ts but uses the SDK
-// directly because this runs via `tsx`, not in a browser.
+// harness. Mirrors api/anthropic.ts (the production proxy) but runs under
+// tsx with the SDK directly.
 //
-// The browser path (src/ai/anthropic.ts) POSTs to /api/anthropic.
-// This file holds ANTHROPIC_API_KEY, so keep it behind the eval
-// folder and never import from src/ai/anthropic.ts here (that one is
-// typed against lib.dom).
+// This file holds ANTHROPIC_API_KEY, so keep it behind the eval folder and
+// never import src/ai/anthropic.ts here (that one is typed against lib.dom).
+//
+// Keep the request translation (structured output, effort, refusal
+// fallback, refusal handling) in step with api/anthropic.ts.
 
 import Anthropic from '@anthropic-ai/sdk';
 
-import type { AnthropicModel } from '../models';
+import { supportsRefusalFallback, type AnthropicModel, type Effort } from '../models';
 
-export { JUDGE_MODEL, HINT_MODEL, type AnthropicModel } from '../models';
+export { JUDGE_MODEL, HINT_MODEL, CHEAT_CHECK_MODEL, type AnthropicModel } from '../models';
 
 export interface TextBlock {
   type: 'text';
@@ -28,14 +29,9 @@ export interface ImageBlock {
 
 export type ContentBlock = TextBlock | ImageBlock;
 
-export interface JsonSchemaTool {
+export interface JsonOutputSchema {
   name: string;
-  description: string;
-  schema: {
-    type: 'object';
-    properties: Record<string, unknown>;
-    required?: string[];
-  };
+  schema: Record<string, unknown>;
 }
 
 export interface CallInput {
@@ -43,31 +39,45 @@ export interface CallInput {
   system: string;
   userContent: ContentBlock[];
   maxTokens: number;
-  jsonSchema?: JsonSchemaTool;
-  timeoutMs?: number;
+  effort?: Effort;
+  /** When set, the reply is JSON matching this schema (structured outputs). */
+  jsonSchema?: JsonOutputSchema;
 }
 
 export interface CallOutput<T = string> {
   content: T;
+  /** The model that answered; differs from the request after a refusal fallback. */
+  model: string;
   inputTokens: number;
   outputTokens: number;
-  /** Prompt-cache tokens. SDK 0.32 doesn't type these on Usage, but the API returns them. */
   cacheCreationInputTokens: number;
   cacheReadInputTokens: number;
   latencyMs: number;
 }
+
+export class ModelRefusalError extends Error {}
+
+// SDK 0.32 predates these request fields and response fields; the API
+// accepts and returns them regardless.
+type CreateParams = Anthropic.Messages.MessageCreateParamsNonStreaming & {
+  output_config?: {
+    effort?: Effort;
+    format?: { type: 'json_schema'; schema: Record<string, unknown> };
+  };
+  fallbacks?: 'default';
+};
 
 type UsageWithCache = Anthropic.Messages.Usage & {
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
 };
 
+const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+
 function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error(
-      'ANTHROPIC_API_KEY not set. Export it before running the eval harness.',
-    );
+    throw new Error('ANTHROPIC_API_KEY not set. Add it to .env.local or export it.');
   }
   return new Anthropic({ apiKey });
 }
@@ -77,7 +87,8 @@ function toSdkContent(
 ): Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam {
   // Forward cache markers the same way api/anthropic.ts does, so eval
   // token costs match production.
-  const cache = block.cacheControl === 'ephemeral' ? { cache_control: { type: 'ephemeral' as const } } : {};
+  const cache =
+    block.cacheControl === 'ephemeral' ? { cache_control: { type: 'ephemeral' as const } } : {};
   if (block.type === 'text') {
     return { type: 'text', text: block.text, ...cache };
   }
@@ -89,57 +100,54 @@ function toSdkContent(
 }
 
 /**
- * Invoke Claude with optional forced JSON output via a tool call.
- * Returns parsed tool input when `jsonSchema` is set, otherwise the
- * first text block's text.
+ * Invoke Claude. Returns parsed JSON when `jsonSchema` is set, otherwise
+ * the text of the reply. Throws ModelRefusalError on a refusal and a plain
+ * Error when the reply is cut off by max_tokens.
  */
-export async function callAnthropicNode<T = string>(
-  input: CallInput,
-): Promise<CallOutput<T>> {
+export async function callAnthropicNode<T = string>(input: CallInput): Promise<CallOutput<T>> {
   const client = getClient();
   const start = performance.now();
 
-  const params: Anthropic.Messages.MessageCreateParamsNonStreaming = {
+  const params: CreateParams = {
     model: input.model,
     max_tokens: input.maxTokens,
     system: input.system,
-    messages: [
-      { role: 'user', content: input.userContent.map(toSdkContent) },
-    ],
+    messages: [{ role: 'user', content: input.userContent.map(toSdkContent) }],
   };
-
-  if (input.jsonSchema) {
-    params.tools = [
-      {
-        name: input.jsonSchema.name,
-        description: input.jsonSchema.description,
-        input_schema: input.jsonSchema.schema,
-      },
-    ];
-    params.tool_choice = { type: 'tool', name: input.jsonSchema.name };
+  if (input.effort || input.jsonSchema) {
+    params.output_config = {
+      ...(input.effort ? { effort: input.effort } : {}),
+      ...(input.jsonSchema
+        ? { format: { type: 'json_schema', schema: input.jsonSchema.schema } }
+        : {}),
+    };
   }
+  const fallback = supportsRefusalFallback(input.model);
+  if (fallback) params.fallbacks = 'default';
 
-  const message = await client.messages.create(params);
+  const message = await client.messages.create(
+    params,
+    fallback ? { headers: { 'anthropic-beta': FALLBACK_BETA } } : undefined,
+  );
   const latencyMs = performance.now() - start;
 
-  let content: T;
-  if (input.jsonSchema) {
-    const toolBlock = message.content.find((b) => b.type === 'tool_use');
-    if (!toolBlock || toolBlock.type !== 'tool_use') {
-      throw new Error('expected tool_use block in response');
-    }
-    content = toolBlock.input as T;
-  } else {
-    const textBlock = message.content.find((b) => b.type === 'text');
-    if (!textBlock || textBlock.type !== 'text') {
-      throw new Error('expected text block in response');
-    }
-    content = textBlock.text as unknown as T;
+  const stopReason = message.stop_reason as string | null;
+  if (stopReason === 'refusal') {
+    throw new ModelRefusalError(`${input.model} declined the request`);
   }
+  if (stopReason === 'max_tokens') {
+    throw new Error(`${input.model} hit max_tokens (${input.maxTokens}) before finishing`);
+  }
+
+  // Responses can start with thinking blocks; read the text block by type.
+  const text = message.content.find((b) => b.type === 'text');
+  if (!text || text.type !== 'text') throw new Error('expected a text block in the response');
+  const content = (input.jsonSchema ? JSON.parse(text.text) : text.text) as T;
 
   const usage = message.usage as UsageWithCache;
   return {
     content,
+    model: message.model,
     inputTokens: usage.input_tokens,
     outputTokens: usage.output_tokens,
     cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,

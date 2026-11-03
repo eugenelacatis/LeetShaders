@@ -1,13 +1,18 @@
 // Types shared by the Node half (run.ts, gen/) and the browser half
 // (browser/harness.ts) of the eval harness. Pure: no DOM or node imports.
 
-import type { Challenge, JudgeResult, LLMJudgeOutput } from '../../judge/types';
+import type { Challenge, CheatCheckOutput, JudgeResult, LLMJudgeOutput } from '../../judge/types';
 
 export interface NodeJudgeArgs {
   challenge: Challenge;
   userShaderSrc: string;
   userPngBase64: string;
   referencePngBase64: string;
+}
+
+export interface NodeCheatCheckArgs {
+  challenge: Challenge;
+  userShaderSrc: string;
 }
 
 export interface RunJudgeArgs {
@@ -26,6 +31,7 @@ export interface RunJudgeOutput {
 
 export interface HarnessWindow {
   nodeJudge: (args: NodeJudgeArgs) => Promise<LLMJudgeOutput>;
+  nodeCheatCheck: (args: NodeCheatCheckArgs) => Promise<CheatCheckOutput>;
   runJudge: (args: RunJudgeArgs) => Promise<RunJudgeOutput>;
   renderGrid: (src: string, n: number) => number[] | null;
   harnessReady: boolean;

@@ -1,6 +1,6 @@
 import { compileAndRender, type Uniforms } from './pipeline';
 import { computeMAEResult } from './mae';
-import type { Challenge, JudgeResult, LLMJudgeFn, MAEResult } from './types';
+import type { Challenge, CheatCheckFn, JudgeResult, LLMJudgeFn, MAEResult } from './types';
 import { applyBandLogic, DEFAULT_BANDS, type BandConfig } from '../ai/bandLogic';
 
 // ─── Plumbing only ────────────────────────────────────────────────────────────
@@ -16,6 +16,9 @@ import { applyBandLogic, DEFAULT_BANDS, type BandConfig } from '../ai/bandLogic'
 // score is kept, so a shader that only matches at the default inputs fails.
 // The LLM sees the renders from that worst sample. The default single empty
 // sample keeps the original one-render behavior.
+//
+// cheatCheck: optional source-only check run on confident MAE passes (see
+// applyBandLogic). Without it, confident passes skip every LLM call.
 
 export async function judge(
   userShaderSrc: string,
@@ -23,6 +26,7 @@ export async function judge(
   llmJudge: LLMJudgeFn,
   bandConfig: BandConfig = DEFAULT_BANDS,
   uniformSamples: Uniforms[] = [{}],
+  cheatCheck?: CheatCheckFn,
 ): Promise<JudgeResult> {
   const judgeStart = performance.now();
 
@@ -70,6 +74,7 @@ export async function judge(
       userShaderSrc,
       challenge,
     }),
+    callCheatCheck: cheatCheck ? () => cheatCheck({ userShaderSrc, challenge }) : undefined,
   });
 
   return {
@@ -79,9 +84,10 @@ export async function judge(
     passed: band.passed,
     breakdown: {
       maeRaw: maeResult.rawMae,
-      llmReasoning: band.llmResult?.reasoning,
+      llmReasoning: band.llmResult?.reasoning ?? (band.cheatCheck?.flagged ? band.cheatCheck.reasoning : undefined),
       stageTwoInvoked: band.llmInvoked,
       llmUnavailable: band.llmUnavailable ? true : undefined,
+      cheatCheckInvoked: band.cheatCheck ? true : undefined,
     },
     renderLatencyMs,
     judgeLatencyMs: performance.now() - judgeStart,

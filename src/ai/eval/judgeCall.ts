@@ -5,15 +5,18 @@
 
 import { callAnthropicNode } from './anthropicNode';
 import {
+  buildCheatCheckRequest,
   buildJudgeRequest,
+  type BuildCheatCheckRequestInput,
   type BuildJudgeRequestInput,
+  type CheatCheckResponse,
   type JudgeResponse,
 } from '../judgeRequest';
 
-export type { JudgeResponse } from '../judgeRequest';
+export type { CheatCheckResponse, JudgeResponse } from '../judgeRequest';
 
-export interface JudgeCallResult {
-  response: JudgeResponse;
+export interface CallUsage {
+  model: string;
   inputTokens: number;
   outputTokens: number;
   cacheCreationInputTokens: number;
@@ -21,14 +24,20 @@ export interface JudgeCallResult {
   latencyMs: number;
 }
 
+export interface JudgeCallResult extends CallUsage {
+  response: JudgeResponse;
+}
+
+export interface CheatCheckCallResult extends CallUsage {
+  response: CheatCheckResponse;
+}
+
 export async function judgeFromPngs(input: BuildJudgeRequestInput): Promise<JudgeCallResult> {
-  const result = await callAnthropicNode<JudgeResponse>(buildJudgeRequest(input));
-  return {
-    response: result.content,
-    inputTokens: result.inputTokens,
-    outputTokens: result.outputTokens,
-    cacheCreationInputTokens: result.cacheCreationInputTokens,
-    cacheReadInputTokens: result.cacheReadInputTokens,
-    latencyMs: result.latencyMs,
-  };
+  const { content, ...usage } = await callAnthropicNode<JudgeResponse>(buildJudgeRequest(input));
+  return { response: content, ...usage };
+}
+
+export async function cheatCheckFromSource(input: BuildCheatCheckRequestInput): Promise<CheatCheckCallResult> {
+  const { content, ...usage } = await callAnthropicNode<CheatCheckResponse>(buildCheatCheckRequest(input));
+  return { response: content, ...usage };
 }

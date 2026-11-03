@@ -20,6 +20,8 @@ export interface JudgeResult {
     llmReasoning?: string;
     stageTwoInvoked: boolean;
     llmUnavailable?: boolean;
+    /** True when a confident MAE pass was sent to the source-only cheat check. */
+    cheatCheckInvoked?: boolean;
   };
   renderLatencyMs: number;
   judgeLatencyMs: number;
@@ -45,6 +47,19 @@ export interface LLMJudgeOutput {
 }
 
 export type LLMJudgeFn = (input: LLMJudgeInput) => Promise<LLMJudgeOutput>;
+
+export interface CheatCheckInput {
+  userShaderSrc: string;
+  challenge: Challenge;
+}
+
+export interface CheatCheckOutput {
+  flagged: boolean;
+  reasoning: string;
+}
+
+/** Source-only cheat check run on submissions that pass on MAE alone. */
+export type CheatCheckFn = (input: CheatCheckInput) => Promise<CheatCheckOutput>;
 
 export interface ShaderCompileError {
   type: 'compile_error';

@@ -8,15 +8,21 @@ const Anthropic = require('@anthropic-ai/sdk');
 interface TextContent { type: 'text'; text: string; cacheControl?: 'ephemeral' }
 interface ImageContent { type: 'image'; mediaType: string; base64: string; cacheControl?: 'ephemeral' }
 type ContentBlock = TextContent | ImageContent;
-interface JsonSchemaTool { name: string; description: string; schema: Record<string, unknown> }
+interface JsonOutputSchema { name: string; schema: Record<string, unknown> }
 interface AnthropicCallInput {
   model: string; system: string; userContent: ContentBlock[];
-  maxTokens: number; jsonSchema?: JsonSchemaTool;
+  maxTokens: number; effort?: 'low' | 'medium' | 'high'; jsonSchema?: JsonOutputSchema;
 }
 interface AnthropicCallOutput {
   content: unknown; inputTokens: number; outputTokens: number;
   latencyMs: number; cacheHit: boolean;
 }
+
+// Models with server-side refusal fallback (src/ai/models.ts
+// supportsRefusalFallback). Haiku 5.5 has none. Keep the request translation
+// below in step with src/ai/eval/anthropicNode.ts.
+const FALLBACK_MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5']);
+const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
 function send(res: any, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -72,20 +78,37 @@ module.exports = async function handler(req: any, res: any) {
     messages: [{ role: 'user', content: body.userContent.map(toBlock) }],
   };
 
-  if (body.jsonSchema) {
-    params.tools = [{ name: body.jsonSchema.name, description: body.jsonSchema.description, input_schema: body.jsonSchema.schema }];
-    params.tool_choice = { type: 'tool', name: body.jsonSchema.name };
+  // These models reject a forced tool_choice, so JSON comes from structured
+  // outputs. Thinking is always on; effort sets how much.
+  if (body.effort || body.jsonSchema) {
+    params.output_config = {
+      ...(body.effort ? { effort: body.effort } : {}),
+      ...(body.jsonSchema ? { format: { type: 'json_schema', schema: body.jsonSchema.schema } } : {}),
+    };
   }
+  const fallback = FALLBACK_MODELS.has(body.model);
+  if (fallback) params.fallbacks = 'default';
 
-  const message = await client.messages.create(params);
+  let message: any;
+  try {
+    message = await client.messages.create(
+      params,
+      fallback ? { headers: { 'anthropic-beta': FALLBACK_BETA } } : undefined,
+    );
+  } catch (err: any) {
+    return send(res, err?.status ?? 502, { error: err?.message ?? 'Anthropic request failed' });
+  }
   const latencyMs = Date.now() - start;
-  const msgContent: any[] = message.content;
 
-  let content: unknown;
+  if (message.stop_reason === 'refusal') return send(res, 422, { error: `${body.model} declined the request` });
+  if (message.stop_reason === 'max_tokens') return send(res, 502, { error: `${body.model} hit max_tokens before finishing` });
+
+  // Responses can start with thinking blocks; read the text block by type.
+  const text: string = message.content.find((b: any) => b.type === 'text')?.text ?? '';
+  let content: unknown = text;
   if (body.jsonSchema) {
-    content = msgContent.find((b: any) => b.type === 'tool_use')?.input ?? null;
-  } else {
-    content = msgContent.find((b: any) => b.type === 'text')?.text ?? '';
+    try { content = JSON.parse(text); }
+    catch { return send(res, 502, { error: 'Model returned invalid JSON' }); }
   }
 
   const usage: any = message.usage;

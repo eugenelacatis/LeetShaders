@@ -1,7 +1,7 @@
 // Browser half of the eval harness. Loaded by run.ts through Vite inside
 // headless Chromium (SwiftShader WebGL2). It drives the production judge
 // (src/judge/combiner.ts) on the one shared pipeline. The LLM stage is
-// bridged back to Node via window.nodeJudge, so the API key never enters
+// bridged back to Node via window.nodeJudge / window.nodeCheatCheck, so the API key never enters
 // the page.
 
 import { judge } from '../../../judge/combiner';
@@ -39,6 +39,8 @@ window.runJudge = async ({ shaderSrc, challenge, uniformSeed }) => {
     },
     undefined,
     sampleUniforms(uniformSeed),
+    (input) =>
+      window.nodeCheatCheck({ challenge: input.challenge, userShaderSrc: input.userShaderSrc }),
   );
   return {
     result,

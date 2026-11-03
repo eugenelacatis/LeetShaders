@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { Challenge } from '../../judge/types';
-import { llmJudge } from '../judgePrompt';
-import { judgeFromPngs } from './judgeCall';
+import { llmCheatCheck, llmJudge } from '../judgePrompt';
+import { cheatCheckFromSource, judgeFromPngs } from './judgeCall';
 import { callAnthropicNode } from './anthropicNode';
 
 // Production encodes RGBA buffers in the browser; pin the encoder output so
@@ -62,6 +62,7 @@ describe('judge prompt parity', () => {
       content: VERDICT,
       inputTokens: 1,
       outputTokens: 1,
+      model: 'm',
       cacheCreationInputTokens: 0,
       cacheReadInputTokens: 0,
       latencyMs: 1,
@@ -87,5 +88,38 @@ describe('judge prompt parity', () => {
     const evalBody = JSON.parse(JSON.stringify(nodeMock.mock.calls[0][0]));
 
     expect(evalBody).toEqual(productionBody);
+  });
+
+  it('production and eval build identical cheat-check requests for the same input', async () => {
+    const verdict = { flagged: true, flagReason: 'color table' };
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ content: verdict, inputTokens: 1, outputTokens: 1, latencyMs: 1, cacheHit: false }),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const nodeMock = vi.mocked(callAnthropicNode);
+    nodeMock.mockReset();
+    nodeMock.mockResolvedValue({
+      content: verdict,
+      model: 'm',
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+      latencyMs: 1,
+    });
+
+    const out = await llmCheatCheck({ userShaderSrc: USER_SRC, challenge: CHALLENGE });
+    await cheatCheckFromSource({ challenge: CHALLENGE, userShaderSrc: USER_SRC });
+
+    const productionBody = JSON.parse(
+      (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string,
+    );
+    const evalBody = JSON.parse(JSON.stringify(nodeMock.mock.calls[0]![0]));
+    expect(evalBody).toEqual(productionBody);
+    expect(out).toEqual({ flagged: true, reasoning: 'color table' });
   });
 });

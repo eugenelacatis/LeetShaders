@@ -1,5 +1,5 @@
-import type { LLMJudgeFn, LLMJudgeInput, LLMJudgeOutput } from './types';
-import { llmJudge as realJudge } from '../ai/judgePrompt';
+import type { CheatCheckFn, CheatCheckInput, CheatCheckOutput, LLMJudgeFn, LLMJudgeInput, LLMJudgeOutput } from './types';
+import { llmJudge as realJudge, llmCheatCheck as realCheatCheck } from '../ai/judgePrompt';
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 // Keyed by (challenge_id, shader_hash) so identical submissions never hit the
@@ -37,9 +37,24 @@ export function withCache(judge: LLMJudgeFn): LLMJudgeFn {
   };
 }
 
+const cheatCache = new Map<string, CheatCheckOutput>();
+
+export function withCheatCache(check: CheatCheckFn): CheatCheckFn {
+  return async (input: CheatCheckInput): Promise<CheatCheckOutput> => {
+    const key = cacheKey(input.challenge.id, input.userShaderSrc);
+    const hit = cheatCache.get(key);
+    if (hit) return hit;
+    const result = await check(input);
+    cheatCache.set(key, result);
+    return result;
+  };
+}
+
 export function clearCache(): void {
   cache.clear();
+  cheatCache.clear();
 }
 
 // Default export: real judge wrapped in cache.
 export const llmJudge: LLMJudgeFn = withCache(realJudge);
+export const llmCheatCheck: CheatCheckFn = withCheatCache(realCheatCheck);

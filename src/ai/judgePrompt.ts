@@ -4,13 +4,20 @@
 // blocks come from judgeRequest.ts, shared with the eval harness. Model
 // strings live in models.ts.
 
-import type { LLMJudgeFn, LLMJudgeInput, LLMJudgeOutput } from '../judge/types';
+import type { CheatCheckFn, LLMJudgeFn, LLMJudgeInput, LLMJudgeOutput } from '../judge/types';
 import { callAnthropic } from './anthropic';
 import { rgbaToPngBase64 } from './imageEncode';
-import { buildJudgeRequest, toLLMJudgeOutput, type JudgeResponse } from './judgeRequest';
+import {
+  buildCheatCheckRequest,
+  buildJudgeRequest,
+  toCheatCheckOutput,
+  toLLMJudgeOutput,
+  type CheatCheckResponse,
+  type JudgeResponse,
+} from './judgeRequest';
 
-export { JUDGE_MODEL } from './models';
-export { JUDGE_SYSTEM_PROMPT, toLLMJudgeOutput } from './judgeRequest';
+export { JUDGE_MODEL, CHEAT_CHECK_MODEL } from './models';
+export { JUDGE_SYSTEM_PROMPT, CHEAT_CHECK_SYSTEM_PROMPT, toLLMJudgeOutput } from './judgeRequest';
 
 export type JudgePromptResponse = JudgeResponse;
 
@@ -32,4 +39,12 @@ export const llmJudge: LLMJudgeFn = async (input: LLMJudgeInput): Promise<LLMJud
   );
 
   return toLLMJudgeOutput(result.content);
+};
+
+/** Source-only cheat check for submissions that pass on MAE alone. */
+export const llmCheatCheck: CheatCheckFn = async (input) => {
+  const result = await callAnthropic<CheatCheckResponse>(
+    buildCheatCheckRequest({ challenge: input.challenge, userShaderSrc: input.userShaderSrc }),
+  );
+  return toCheatCheckOutput(result.content);
 };

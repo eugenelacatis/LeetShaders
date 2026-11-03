@@ -72,3 +72,44 @@ describe('applyBandLogic', () => {
     expect(result.trace).toMatch(/Flagged/);
   });
 });
+
+describe('applyBandLogic cheat check', () => {
+  const clean = { flagged: false, reasoning: '' };
+
+  it('runs the cheat check on a confident pass and keeps the pass when clean', async () => {
+    const callLLM = vi.fn();
+    const callCheatCheck = vi.fn(async () => clean);
+    const result = await applyBandLogic({ maeScore: 99, callLLM, callCheatCheck });
+    expect(callCheatCheck).toHaveBeenCalledOnce();
+    expect(callLLM).not.toHaveBeenCalled();
+    expect(result.passed).toBe(true);
+    expect(result.cheatCheck).toEqual(clean);
+  });
+
+  it('fails a confident pass the cheat check flags', async () => {
+    const callCheatCheck = vi.fn(async () => ({ flagged: true, reasoning: 'baked color table' }));
+    const result = await applyBandLogic({ maeScore: 99, callLLM: vi.fn(), callCheatCheck });
+    expect(result.passed).toBe(false);
+    expect(result.finalScore).toBe(0);
+    expect(result.trace).toMatch(/baked color table/);
+  });
+
+  it('keeps the MAE pass when the cheat check errors', async () => {
+    const callCheatCheck = vi.fn(async () => {
+      throw new Error('timeout');
+    });
+    const result = await applyBandLogic({ maeScore: 99, callLLM: vi.fn(), callCheatCheck });
+    expect(result.passed).toBe(true);
+    expect(result.cheatCheck).toBeNull();
+    expect(result.trace).toMatch(/Cheat check unavailable/);
+  });
+
+  it('does not run the cheat check on borderline or confident-fail scores', async () => {
+    const callCheatCheck = vi.fn(async () => clean);
+    const callLLM = vi.fn(async () => ({ score: 50, reasoning: '', flagged: false }));
+    await applyBandLogic({ maeScore: 65, callLLM, callCheatCheck });
+    await applyBandLogic({ maeScore: 10, callLLM, callCheatCheck });
+    expect(callCheatCheck).not.toHaveBeenCalled();
+  });
+});
+

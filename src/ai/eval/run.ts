@@ -20,13 +20,19 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import * as dotenv from 'dotenv';
-import type { Challenge, JudgeResult, LLMJudgeOutput } from '../../judge/types';
+import type { Challenge, CheatCheckOutput, JudgeResult, LLMJudgeOutput } from '../../judge/types';
 import { DEFAULT_BANDS, classifyByBand } from '../bandLogic';
-import { toLLMJudgeOutput } from '../judgeRequest';
-import { JUDGE_MODEL } from '../models';
-import { judgeFromPngs } from './judgeCall';
+import { toCheatCheckOutput, toLLMJudgeOutput } from '../judgeRequest';
+import { CHEAT_CHECK_MODEL, JUDGE_MODEL } from '../models';
+import { cheatCheckFromSource, judgeFromPngs } from './judgeCall';
 import { openHarness } from './browserSession';
-import type { HarnessWindow, NodeJudgeArgs, RunJudgeArgs, RunJudgeOutput } from './harnessTypes';
+import type {
+  HarnessWindow,
+  NodeCheatCheckArgs,
+  NodeJudgeArgs,
+  RunJudgeArgs,
+  RunJudgeOutput,
+} from './harnessTypes';
 import { FIXTURES_DIR, VERDICTS, loadChallenges, discoverFixtures, type Fixture, type Verdict } from './fixtures';
 
 // ANTHROPIC_API_KEY may live in .env.local (gitignored), same as seed.ts.
@@ -38,13 +44,25 @@ const OUT_DIR = join(HERE, 'out');
 const REPORT_PATH = join(HERE, 'REPORT.md');
 const SPLIT_PATH = join(FIXTURES_DIR, 'split.json');
 
-// claude-opus-4-7 list prices, USD per million tokens (Anthropic pricing,
-// checked 2026-11-02). Cache writes bill at 1.25x input, reads at 0.1x.
-const PRICE_PER_MTOK = { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 };
-// Rough pre-flight estimate per call: two 512x512 PNGs at ~350 tokens each
-// (w*h/750), plus system prompt, tool schema, and shader source.
-const EST_INPUT_TOKENS_PER_CALL = 2000;
-const EST_OUTPUT_TOKENS_PER_CALL = 250;
+// List prices, USD per million tokens (Anthropic pricing, checked
+// 2026-11-02). Cache writes bill at 1.25x input.
+interface Price {
+  input: number;
+  output: number;
+  cacheWrite: number;
+  cacheRead: number;
+}
+const PRICES: Record<string, Price> = {
+  [JUDGE_MODEL]: { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+  [CHEAT_CHECK_MODEL]: { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01 },
+};
+// Rough pre-flight estimates. Judge: two 512x512 PNGs at ~350 tokens each
+// (w*h/750) plus prompt and source; output includes thinking at medium
+// effort. Cheat check: prompt and source only, low effort.
+const EST = {
+  judge: { input: 2500, output: 1500 },
+  cheat: { input: 1200, output: 400 },
+};
 
 interface ExpectedOutcome {
   shouldPass: boolean;
@@ -79,13 +97,22 @@ async function selectSet(fixtures: Fixture[], set: string): Promise<Fixture[]> {
 
 // ─── Running ──────────────────────────────────────────────────────────────────
 
-interface LLMCall {
-  output: LLMJudgeOutput;
+interface Usage {
+  /** Model that answered (differs from the request after a refusal fallback). */
+  model: string;
   inputTokens: number;
   outputTokens: number;
   cacheCreationInputTokens: number;
   cacheReadInputTokens: number;
   latencyMs: number;
+}
+
+interface LLMCall extends Usage {
+  output: LLMJudgeOutput;
+}
+
+interface CheatCall extends Usage {
+  output: CheatCheckOutput;
 }
 
 export interface FixtureRun {
@@ -94,7 +121,11 @@ export interface FixtureRun {
   result: JudgeResult;
   /** MAE landed in the borderline band (LLM would be / was called). */
   borderline: boolean;
+  /** Confident MAE pass (cheat check would be / was called). */
+  confidentPass: boolean;
   llm: LLMCall | null;
+  cheat: CheatCall | null;
+  /** Flagged by either the visual judge or the cheat check. */
   flagged: boolean;
 }
 
@@ -102,19 +133,21 @@ type Mode = 'mae-only' | 'live';
 
 const MAE_ONLY_SENTINEL = 'eval: --mae-only, LLM not called';
 
-function costOf(
-  c: Pick<
-    LLMCall,
-    'inputTokens' | 'outputTokens' | 'cacheCreationInputTokens' | 'cacheReadInputTokens'
-  >,
-): number {
+function costOf(c: Omit<Usage, 'latencyMs'>): number {
+  // A refusal fallback can answer with a model not in the table; price it
+  // as the judge so the budget errs high.
+  const p = PRICES[c.model] ?? PRICES[JUDGE_MODEL]!;
   return (
-    (c.inputTokens * PRICE_PER_MTOK.input +
-      c.outputTokens * PRICE_PER_MTOK.output +
-      c.cacheCreationInputTokens * PRICE_PER_MTOK.cacheWrite +
-      c.cacheReadInputTokens * PRICE_PER_MTOK.cacheRead) /
+    (c.inputTokens * p.input +
+      c.outputTokens * p.output +
+      c.cacheCreationInputTokens * p.cacheWrite +
+      c.cacheReadInputTokens * p.cacheRead) /
     1_000_000
   );
+}
+
+function estimate(model: string, n: number, per: { input: number; output: number }): number {
+  return costOf({ model, inputTokens: n * per.input, outputTokens: n * per.output, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 });
 }
 
 class BudgetExceeded extends Error {}
@@ -127,21 +160,31 @@ async function runAll(
   maxCost: number,
   spentSoFar: { usd: number },
 ): Promise<FixtureRun[]> {
-  // The page calls back into Node for stage two. Fixtures run one at a time,
-  // so a single slot is enough to attribute each call to its fixture.
-  const slot: { call: LLMCall | null } = { call: null };
+  // The page calls back into Node for LLM calls. Fixtures run one at a
+  // time, so one slot per call type attributes each call to its fixture.
+  const slot: { call: LLMCall | null; cheat: CheatCall | null } = { call: null, cheat: null };
+  const guard = (): void => {
+    if (mode === 'mae-only') throw new Error(MAE_ONLY_SENTINEL);
+    if (spentSoFar.usd >= maxCost) {
+      throw new BudgetExceeded(`spend $${spentSoFar.usd.toFixed(2)} passed --max-cost $${maxCost}`);
+    }
+  };
 
   const session = await openHarness(async (page) => {
     await page.exposeFunction('nodeJudge', async (args: NodeJudgeArgs): Promise<LLMJudgeOutput> => {
-      if (mode === 'mae-only') throw new Error(MAE_ONLY_SENTINEL);
-      if (spentSoFar.usd >= maxCost)
-        throw new BudgetExceeded(
-          `spend $${spentSoFar.usd.toFixed(2)} passed --max-cost $${maxCost}`,
-        );
-      const r = await judgeFromPngs(args);
-      const call: LLMCall = { ...r, output: toLLMJudgeOutput(r.response) };
+      guard();
+      const { response, ...usage } = await judgeFromPngs(args);
+      const call: LLMCall = { ...usage, output: toLLMJudgeOutput(response) };
       spentSoFar.usd += costOf(call);
       slot.call = call;
+      return call.output;
+    });
+    await page.exposeFunction('nodeCheatCheck', async (args: NodeCheatCheckArgs): Promise<CheatCheckOutput> => {
+      guard();
+      const { response, ...usage } = await cheatCheckFromSource(args);
+      const call: CheatCall = { ...usage, output: toCheatCheckOutput(response) };
+      spentSoFar.usd += costOf(call);
+      slot.cheat = call;
       return call.output;
     });
   });
@@ -152,6 +195,7 @@ async function runAll(
       const challenge = challenges.get(fixture.challengeId)!;
       const shaderSrc = await readFile(fixture.sourcePath, 'utf8');
       slot.call = null;
+      slot.cheat = null;
       const args: RunJudgeArgs = { shaderSrc, challenge, uniformSeed: seed };
       const out = (await session.page.evaluate(
         (a) => (globalThis as unknown as HarnessWindow).runJudge(a),
@@ -172,22 +216,26 @@ async function runAll(
         );
       }
 
-      // Set by the nodeJudge callback during evaluate(); TS cannot see that.
+      // Set by the node callbacks during evaluate(); TS cannot see that.
       const llm = slot.call as LLMCall | null;
+      const cheat = slot.cheat as CheatCall | null;
+      const band = classifyByBand(out.result.maeScore).kind;
       const run: FixtureRun = {
         fixture,
         expected: expectedOutcome(fixture.verdict),
         result: out.result,
-        borderline: classifyByBand(out.result.maeScore).kind === 'needs-llm',
+        borderline: band === 'needs-llm',
+        confidentPass: band === 'confident-pass',
         llm,
-        flagged: llm?.output.flagged ?? false,
+        cheat,
+        flagged: (llm?.output.flagged ?? false) || (cheat?.output.flagged ?? false),
       };
       runs.push(run);
 
       const tail =
         mode === 'live'
-          ? ` llm=${llm ? llm.output.score : '-'} flagged=${run.flagged} pass=${out.result.passed} spent=$${spentSoFar.usd.toFixed(3)}`
-          : ` band=${run.borderline ? 'llm' : 'skip'}`;
+          ? ` llm=${llm ? llm.output.score : '-'} cheat=${cheat ? cheat.output.flagged : '-'} flagged=${run.flagged} pass=${out.result.passed} spent=$${spentSoFar.usd.toFixed(3)}`
+          : ` band=${band}`;
       console.log(
         `[${i + 1}/${fixtures.length}] ${fixture.key} mae=${out.result.maeScore.toFixed(1)}${tail}`,
       );
@@ -331,8 +379,12 @@ function metrics(runs: FixtureRun[]) {
   const shouldFail = runs.filter((r) => !r.expected.shouldPass);
   const shouldPass = runs.filter((r) => r.expected.shouldPass);
   const adv = runs.filter((r) => r.fixture.verdict === 'adversarial');
-  const llmRuns = runs.filter((r) => r.llm);
-  const totalCost = llmRuns.reduce((s, r) => s + costOf(r.llm!), 0);
+  const advPassed = adv.filter((r) => r.result.passed);
+  const judgeCalls = runs.flatMap((r) => (r.llm ? [r.llm] : []));
+  const cheatCalls = runs.flatMap((r) => (r.cheat ? [r.cheat] : []));
+  const allCalls: Usage[] = [...judgeCalls, ...cheatCalls];
+  const judgeCost = judgeCalls.reduce((s, c) => s + costOf(c), 0);
+  const cheatCost = cheatCalls.reduce((s, c) => s + costOf(c), 0);
   return {
     total: runs.length,
     falsePass: shouldFail.filter((r) => r.result.passed).length,
@@ -340,44 +392,39 @@ function metrics(runs: FixtureRun[]) {
     falseFail: shouldPass.filter((r) => !r.result.passed).length,
     shouldPass: shouldPass.length,
     adv: adv.length,
-    advLeakSkipped: adv.filter((r) => r.result.passed && !r.result.breakdown.stageTwoInvoked)
-      .length,
-    advLeakLLM: adv.filter((r) => r.result.passed && r.result.breakdown.stageTwoInvoked).length,
-    advReachedLLM: adv.filter((r) => r.llm).length,
-    advFlagged: adv.filter((r) => r.flagged).length,
-    skipped: runs.filter((r) => !r.result.breakdown.stageTwoInvoked).length,
-    llmCalls: llmRuns.length,
+    advLeakNoCheck: advPassed.filter((r) => !r.llm && !r.cheat).length,
+    advLeakCheat: advPassed.filter((r) => r.cheat).length,
+    advLeakJudge: advPassed.filter((r) => r.llm).length,
+    advSeenByJudge: adv.filter((r) => r.llm).length,
+    advFlaggedByJudge: adv.filter((r) => r.llm?.output.flagged).length,
+    advSeenByCheat: adv.filter((r) => r.cheat).length,
+    advFlaggedByCheat: adv.filter((r) => r.cheat?.output.flagged).length,
+    goodFlaggedByCheat: shouldPass.filter((r) => r.cheat?.output.flagged).length,
+    goodSeenByCheat: shouldPass.filter((r) => r.cheat).length,
+    skipped: runs.filter((r) => !r.llm && !r.cheat).length,
+    judgeCalls: judgeCalls.length,
+    cheatCalls: cheatCalls.length,
     llmUnavailable: runs.filter((r) => r.result.breakdown.llmUnavailable).length,
-    inputTokens: llmRuns.reduce(
-      (s, r) =>
-        s + r.llm!.inputTokens + r.llm!.cacheCreationInputTokens + r.llm!.cacheReadInputTokens,
-      0,
-    ),
-    outputTokens: llmRuns.reduce((s, r) => s + r.llm!.outputTokens, 0),
-    totalCost,
-    judgeP50: percentile(
-      runs.map((r) => r.result.judgeLatencyMs),
-      50,
-    ),
-    judgeP95: percentile(
-      runs.map((r) => r.result.judgeLatencyMs),
-      95,
-    ),
-    llmP50: percentile(
-      llmRuns.map((r) => r.llm!.latencyMs),
-      50,
-    ),
-    llmP95: percentile(
-      llmRuns.map((r) => r.llm!.latencyMs),
-      95,
-    ),
+    cheatUnavailable: runs.filter((r) => r.confidentPass && !r.cheat).length,
+    inputTokens: allCalls.reduce((s, c) => s + c.inputTokens + c.cacheCreationInputTokens + c.cacheReadInputTokens, 0),
+    outputTokens: allCalls.reduce((s, c) => s + c.outputTokens, 0),
+    judgeCost,
+    cheatCost,
+    totalCost: judgeCost + cheatCost,
+    fallbackAnswers: allCalls.filter((c) => c.model !== JUDGE_MODEL && c.model !== CHEAT_CHECK_MODEL).length,
+    judgeP50: percentile(runs.map((r) => r.result.judgeLatencyMs), 50),
+    judgeP95: percentile(runs.map((r) => r.result.judgeLatencyMs), 95),
+    llmP50: percentile(judgeCalls.map((c) => c.latencyMs), 50),
+    llmP95: percentile(judgeCalls.map((c) => c.latencyMs), 95),
+    cheatP50: percentile(cheatCalls.map((c) => c.latencyMs), 50),
+    cheatP95: percentile(cheatCalls.map((c) => c.latencyMs), 95),
   };
 }
 
 function confusionTable(runs: FixtureRun[]): string[] {
   const lines = [
-    '| Category | n | Passed | Failed | Reached LLM | Flagged | Correct verdict |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
+    '| Category | n | Passed | Failed | Visual judge | Cheat check | Flagged | Correct verdict |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
   for (const v of VERDICTS) {
     const rs = runs.filter((r) => r.fixture.verdict === v);
@@ -385,7 +432,7 @@ function confusionTable(runs: FixtureRun[]): string[] {
     const passed = rs.filter((r) => r.result.passed).length;
     const correct = rs.filter((r) => r.result.passed === exp.shouldPass).length;
     lines.push(
-      `| ${v} (expect ${exp.shouldPass ? 'pass' : 'fail'}) | ${rs.length} | ${passed} | ${rs.length - passed} | ${rs.filter((r) => r.llm).length} | ${rs.filter((r) => r.flagged).length} | ${pct(correct, rs.length)} |`,
+      `| ${v} (expect ${exp.shouldPass ? 'pass' : 'fail'}) | ${rs.length} | ${passed} | ${rs.length - passed} | ${rs.filter((r) => r.llm).length} | ${rs.filter((r) => r.cheat).length} | ${rs.filter((r) => r.flagged).length} | ${pct(correct, rs.length)} |`,
     );
   }
   return lines;
@@ -396,7 +443,7 @@ function renderReport(sets: RepeatStats[], seed: number, commit: string, started
   L.push('# Judge eval report', '');
   L.push(`- Run started: ${startedAt.toISOString()}`);
   L.push(`- Commit: \`${commit}\``);
-  L.push(`- Model: \`${JUDGE_MODEL}\``);
+  L.push(`- Models: visual judge \`${JUDGE_MODEL}\`, cheat check \`${CHEAT_CHECK_MODEL}\``);
   L.push(
     `- Bands: upper ${DEFAULT_BANDS.upperBand}, lower ${DEFAULT_BANDS.lowerBand}, pass threshold ${DEFAULT_BANDS.passThreshold}, weights MAE ${DEFAULT_BANDS.maeWeight} / LLM ${DEFAULT_BANDS.llmWeight}`,
   );
@@ -414,23 +461,22 @@ function renderReport(sets: RepeatStats[], seed: number, commit: string, started
     L.push(`- False-pass rate: ${pct(m.falsePass, m.shouldFail)} (${m.falsePass}/${m.shouldFail})`);
     L.push(`- False-fail rate: ${pct(m.falseFail, m.shouldPass)} (${m.falseFail}/${m.shouldPass})`);
     L.push(
-      `- Adversarial leak rate: ${pct(m.advLeakSkipped + m.advLeakLLM, m.adv)} (${m.advLeakSkipped} skipped the LLM on a confident MAE pass, ${m.advLeakLLM} reached the LLM and were not caught)`,
+      `- Adversarial leak rate: ${pct(m.advLeakNoCheck + m.advLeakCheat + m.advLeakJudge, m.adv)} (${m.advLeakCheat} passed the cheat check, ${m.advLeakJudge} passed the visual judge, ${m.advLeakNoCheck} reached no LLM)`,
     );
-    L.push(`- Adversarial flagged when the LLM saw them: ${m.advFlagged}/${m.advReachedLLM}`);
+    L.push(`- Adversarial flagged by the visual judge: ${m.advFlaggedByJudge}/${m.advSeenByJudge} it saw`);
+    L.push(`- Adversarial flagged by the cheat check: ${m.advFlaggedByCheat}/${m.advSeenByCheat} it saw`);
+    L.push(`- Good fixtures wrongly flagged by the cheat check: ${m.goodFlaggedByCheat}/${m.goodSeenByCheat} it saw`);
+    L.push(`- Reached no LLM (confident MAE fail): ${pct(m.skipped, m.total)} (${m.skipped}/${m.total})`);
     L.push(
-      `- Skip rate (never reached the LLM): ${pct(m.skipped, m.total)} (${m.skipped}/${m.total})`,
+      `- LLM calls: ${m.judgeCalls} visual judge, ${m.cheatCalls} cheat check${m.llmUnavailable ? `; ${m.llmUnavailable} judge calls failed and fell back to MAE` : ''}${m.cheatUnavailable ? `; ${m.cheatUnavailable} cheat checks failed (pass stood)` : ''}${m.fallbackAnswers ? `; ${m.fallbackAnswers} answered by a refusal fallback model` : ''}`,
     );
+    L.push(`- Tokens: ${m.inputTokens} input, ${m.outputTokens} output (output includes thinking)`);
     L.push(
-      `- LLM calls: ${m.llmCalls}${m.llmUnavailable ? `, ${m.llmUnavailable} failed and fell back to MAE` : ''}`,
+      `- Cost: $${m.totalCost.toFixed(3)} total (judge $${m.judgeCost.toFixed(3)}, cheat check $${m.cheatCost.toFixed(4)}), $${(m.totalCost / Math.max(1, m.total)).toFixed(4)} per graded submission`,
     );
-    L.push(`- Tokens: ${m.inputTokens} input, ${m.outputTokens} output`);
-    L.push(
-      `- Cost: $${m.totalCost.toFixed(3)} total, $${(m.totalCost / Math.max(1, m.total)).toFixed(4)} per graded submission, $${(m.totalCost / Math.max(1, m.llmCalls)).toFixed(4)} per LLM call`,
-    );
-    L.push(
-      `- Judge latency (render + MAE + LLM): p50 ${m.judgeP50.toFixed(0)} ms, p95 ${m.judgeP95.toFixed(0)} ms`,
-    );
-    L.push(`- LLM call latency: p50 ${m.llmP50.toFixed(0)} ms, p95 ${m.llmP95.toFixed(0)} ms`, '');
+    L.push(`- Judge latency (render + MAE + LLMs): p50 ${m.judgeP50.toFixed(0)} ms, p95 ${m.judgeP95.toFixed(0)} ms`);
+    L.push(`- Visual judge call latency: p50 ${m.llmP50.toFixed(0)} ms, p95 ${m.llmP95.toFixed(0)} ms`);
+    L.push(`- Cheat check call latency: p50 ${m.cheatP50.toFixed(0)} ms, p95 ${m.cheatP95.toFixed(0)} ms`, '');
   }
 
   const repeats = sets.filter((s) => s.label.startsWith('Held-out run'));
@@ -460,8 +506,8 @@ function renderReport(sets: RepeatStats[], seed: number, commit: string, started
   const detail = sets[0]!;
   L.push(`## Per-fixture detail (${detail.label})`, '');
   L.push(
-    '| Fixture | MAE | LLM | Flagged | Final | Passed | Expected | Reasoning |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Fixture | MAE | LLM | Cheat check | Flagged | Final | Passed | Expected | Reasoning |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   );
   for (const r of detail.runs) {
     const reasoning = (r.result.breakdown.llmReasoning ?? '')
@@ -470,7 +516,7 @@ function renderReport(sets: RepeatStats[], seed: number, commit: string, started
       .slice(0, 140);
     const ok = r.result.passed === r.expected.shouldPass ? '' : ' **x**';
     L.push(
-      `| \`${r.fixture.key}\` | ${r.result.maeScore.toFixed(1)} | ${r.llm ? r.llm.output.score : '-'} | ${r.flagged} | ${r.result.finalScore} | ${r.result.passed}${ok} | ${r.expected.shouldPass ? 'pass' : 'fail'} | ${reasoning} |`,
+      `| \`${r.fixture.key}\` | ${r.result.maeScore.toFixed(1)} | ${r.llm ? r.llm.output.score : '-'} | ${r.cheat ? (r.cheat.output.flagged ? 'flagged' : 'clean') : '-'} | ${r.flagged} | ${r.result.finalScore} | ${r.result.passed}${ok} | ${r.expected.shouldPass ? 'pass' : 'fail'} | ${reasoning} |`,
     );
   }
   L.push('');
@@ -518,9 +564,10 @@ async function main(): Promise<void> {
       histogramSvg(runs, bands.upperBand, bands.lowerBand),
     );
     const wouldCall = runs.filter((r) => r.borderline).length;
+    const wouldCheck = runs.filter((r) => r.confidentPass).length;
     console.log(`\nWrote out/mae-${set}.csv and mae-histogram-${set}.svg`);
     console.log(
-      `With current DEFAULT_BANDS (${DEFAULT_BANDS.upperBand}/${DEFAULT_BANDS.lowerBand}): ${wouldCall} would reach the LLM, skip rate ${pct(runs.length - wouldCall, runs.length)}`,
+      `With current DEFAULT_BANDS (${DEFAULT_BANDS.upperBand}/${DEFAULT_BANDS.lowerBand}): ${wouldCall} visual judge calls, ${wouldCheck} cheat checks, ${runs.length - wouldCall - wouldCheck} reach no LLM`,
     );
     for (const v of VERDICTS) {
       const s = runs.filter((r) => r.fixture.verdict === v).map((r) => r.result.maeScore);
@@ -536,25 +583,21 @@ async function main(): Promise<void> {
       (r) => r.result.maeScore >= bands.lowerBand && r.result.maeScore < bands.upperBand,
     ).length;
     console.log(
-      `  with suggested bands: ${inBand} reach the LLM, skip rate ${pct(runs.length - inBand, runs.length)}`,
+      `  with suggested bands: ${inBand} visual judge calls`,
     );
     console.log(
-      `  adversarial at/above upperBand (would skip the LLM and leak): ${bands.leaks.map((r) => r.fixture.key).join(', ') || 'none'}`,
+      `  adversarial at/above upperBand (only the cheat check reads them): ${bands.leaks.map((r) => r.fixture.key).join(', ') || 'none'}`,
     );
     return;
   }
 
   // Live. Pre-flight with a free MAE-only pass to count calls and estimate cost.
   const pre = await runAll(fixtures, challenges, 'mae-only', seed, 0, spent);
-  const calls = pre.filter((r) => r.borderline).length * repeat;
-  const estCost = costOf({
-    inputTokens: calls * EST_INPUT_TOKENS_PER_CALL,
-    outputTokens: calls * EST_OUTPUT_TOKENS_PER_CALL,
-    cacheCreationInputTokens: 0,
-    cacheReadInputTokens: 0,
-  });
+  const judgeN = pre.filter((r) => r.borderline).length * repeat;
+  const cheatN = pre.filter((r) => r.confidentPass).length * repeat;
+  const estCost = estimate(JUDGE_MODEL, judgeN, EST.judge) + estimate(CHEAT_CHECK_MODEL, cheatN, EST.cheat);
   console.log(
-    `\nPre-flight: ${calls} LLM calls (${repeat} run(s)), ~${calls * EST_INPUT_TOKENS_PER_CALL} input + ~${calls * EST_OUTPUT_TOKENS_PER_CALL} output tokens, est. $${estCost.toFixed(2)} (cap $${maxCost}).`,
+    `\nPre-flight (${repeat} run(s)): ${judgeN} visual judge calls (~${judgeN * EST.judge.input} in / ~${judgeN * EST.judge.output} out tokens), ${cheatN} cheat checks (~${cheatN * EST.cheat.input} in / ~${cheatN * EST.cheat.output} out). Est. $${estCost.toFixed(2)} (cap $${maxCost}).`,
   );
   if (estCost > maxCost)
     throw new Error(`estimated cost $${estCost.toFixed(2)} exceeds --max-cost $${maxCost}`);

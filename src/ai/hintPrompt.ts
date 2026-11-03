@@ -155,7 +155,10 @@ export async function generateHint(
     model: HINT_MODEL,
     system: HINT_SYSTEM_PROMPT,
     userContent: buildUserContent(input, userPng, referencePng),
-    maxTokens: 200,
+    // Thinking is always on and counts toward maxTokens; low effort keeps
+    // it short, and the cap leaves room for it plus the one-line hint.
+    maxTokens: 4000,
+    effort: 'low',
   });
 
   const hint = result.content.trim();
