@@ -1,8 +1,10 @@
 import {
+  Alert,
   Box,
   Button,
   CircularProgress,
   Collapse,
+  Snackbar,
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -155,6 +157,7 @@ export default function ChallengePage() {
   const [resultData, setResultData] = useState<ResultData | null>(null);
   const [running, setRunning] = useState(false);
   const [history, setHistory] = useState<SubmissionRecord[]>([]);
+  const [solveSaveError, setSolveSaveError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'description' | 'solution' | 'submissions'>('description');
 
   const [leftWidth, setLeftWidth] = useState(360);
@@ -253,7 +256,15 @@ export default function ChallengePage() {
       setHistory(getSubmissionHistory(challenge.id));
 
       if (judgeResult.passed) {
-        try { await submitSolve(challenge.id, judgeResult.finalScore, src); } catch {}
+        try {
+          await submitSolve(challenge.id, judgeResult.finalScore, src);
+        } catch (err) {
+          // The pass already shows in the result panel; tell the user the
+          // solve record (leaderboard / solved badge) didn't save.
+          const message = err instanceof Error ? err.message : String(err);
+          console.error('submitSolve failed:', err);
+          setSolveSaveError(message);
+        }
       }
     } catch (err) {
       setResultData(null);
@@ -483,6 +494,16 @@ export default function ChallengePage() {
           </Box>
         </Box>
       </Box>
+      <Snackbar
+        open={solveSaveError !== null}
+        autoHideDuration={8000}
+        onClose={() => setSolveSaveError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="warning" onClose={() => setSolveSaveError(null)}>
+          Passed, but your solve wasn't saved: {solveSaveError}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
