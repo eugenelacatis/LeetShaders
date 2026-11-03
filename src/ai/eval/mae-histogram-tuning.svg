@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420" font-family="system-ui, sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="#fff"/>
+<text x="112" y="70" text-anchor="end" fill="#333">correct (40)</text>
+<line x1="120" y1="100" x2="700" y2="100" stroke="#999"/>
+<rect x="672" y="35" width="27" height="65" fill="#2a9d5c"><title>correct: 40 in [95, 100)</title></rect>
+<text x="112" y="160" text-anchor="end" fill="#333">almost-correct (35)</text>
+<line x1="120" y1="190" x2="700" y2="190" stroke="#999"/>
+<rect x="121" y="139.44444444444446" width="27" height="50.55555555555556" fill="#4f7fd8"><title>almost-correct: 7 in [0, 5)</title></rect>
+<rect x="179" y="182.77777777777777" width="27" height="7.222222222222221" fill="#4f7fd8"><title>almost-correct: 1 in [10, 15)</title></rect>
+<rect x="382" y="175.55555555555554" width="27" height="14.444444444444443" fill="#4f7fd8"><title>almost-correct: 2 in [45, 50)</title></rect>
+<rect x="411" y="168.33333333333334" width="27" height="21.666666666666664" fill="#4f7fd8"><title>almost-correct: 3 in [50, 55)</title></rect>
+<rect x="440" y="175.55555555555554" width="27" height="14.444444444444443" fill="#4f7fd8"><title>almost-correct: 2 in [55, 60)</title></rect>
+<rect x="469" y="175.55555555555554" width="27" height="14.444444444444443" fill="#4f7fd8"><title>almost-correct: 2 in [60, 65)</title></rect>
+<rect x="498" y="182.77777777777777" width="27" height="7.222222222222221" fill="#4f7fd8"><title>almost-correct: 1 in [65, 70)</title></rect>
+<rect x="527" y="182.77777777777777" width="27" height="7.222222222222221" fill="#4f7fd8"><title>almost-correct: 1 in [70, 75)</title></rect>
+<rect x="556" y="182.77777777777777" width="27" height="7.222222222222221" fill="#4f7fd8"><title>almost-correct: 1 in [75, 80)</title></rect>
+<rect x="585" y="175.55555555555554" width="27" height="14.444444444444443" fill="#4f7fd8"><title>almost-correct: 2 in [80, 85)</title></rect>
+<rect x="614" y="175.55555555555554" width="27" height="14.444444444444443" fill="#4f7fd8"><title>almost-correct: 2 in [85, 90)</title></rect>
+<rect x="643" y="175.55555555555554" width="27" height="14.444444444444443" fill="#4f7fd8"><title>almost-correct: 2 in [90, 95)</title></rect>
+<rect x="672" y="125" width="27" height="65" fill="#4f7fd8"><title>almost-correct: 9 in [95, 100)</title></rect>
+<text x="112" y="250" text-anchor="end" fill="#333">wrong (40)</text>
+<line x1="120" y1="280" x2="700" y2="280" stroke="#999"/>
+<rect x="121" y="215" width="27" height="65" fill="#d0573a"><title>wrong: 36 in [0, 5)</title></rect>
+<rect x="411" y="278.19444444444446" width="27" height="1.8055555555555554" fill="#d0573a"><title>wrong: 1 in [50, 55)</title></rect>
+<rect x="440" y="278.19444444444446" width="27" height="1.8055555555555554" fill="#d0573a"><title>wrong: 1 in [55, 60)</title></rect>
+<rect x="469" y="278.19444444444446" width="27" height="1.8055555555555554" fill="#d0573a"><title>wrong: 1 in [60, 65)</title></rect>
+<rect x="498" y="278.19444444444446" width="27" height="1.8055555555555554" fill="#d0573a"><title>wrong: 1 in [65, 70)</title></rect>
+<text x="112" y="340" text-anchor="end" fill="#333">adversarial (35)</text>
+<line x1="120" y1="370" x2="700" y2="370" stroke="#999"/>
+<rect x="121" y="305" width="27" height="65" fill="#9a4fc4"><title>adversarial: 20 in [0, 5)</title></rect>
+<rect x="237" y="366.75" width="27" height="3.25" fill="#9a4fc4"><title>adversarial: 1 in [20, 25)</title></rect>
+<rect x="353" y="366.75" width="27" height="3.25" fill="#9a4fc4"><title>adversarial: 1 in [40, 45)</title></rect>
+<rect x="411" y="363.5" width="27" height="6.5" fill="#9a4fc4"><title>adversarial: 2 in [50, 55)</title></rect>
+<rect x="440" y="366.75" width="27" height="3.25" fill="#9a4fc4"><title>adversarial: 1 in [55, 60)</title></rect>
+<rect x="527" y="366.75" width="27" height="3.25" fill="#9a4fc4"><title>adversarial: 1 in [70, 75)</title></rect>
+<rect x="556" y="366.75" width="27" height="3.25" fill="#9a4fc4"><title>adversarial: 1 in [75, 80)</title></rect>
+<rect x="585" y="360.25" width="27" height="9.75" fill="#9a4fc4"><title>adversarial: 3 in [80, 85)</title></rect>
+<rect x="614" y="363.5" width="27" height="6.5" fill="#9a4fc4"><title>adversarial: 2 in [85, 90)</title></rect>
+<rect x="672" y="360.25" width="27" height="9.75" fill="#9a4fc4"><title>adversarial: 3 in [95, 100)</title></rect>
+<text x="120" y="395" text-anchor="middle" fill="#555">0</text>
+<text x="178" y="395" text-anchor="middle" fill="#555">10</text>
+<text x="236" y="395" text-anchor="middle" fill="#555">20</text>
+<text x="294" y="395" text-anchor="middle" fill="#555">30</text>
+<text x="352" y="395" text-anchor="middle" fill="#555">40</text>
+<text x="410" y="395" text-anchor="middle" fill="#555">50</text>
+<text x="468" y="395" text-anchor="middle" fill="#555">60</text>
+<text x="526" y="395" text-anchor="middle" fill="#555">70</text>
+<text x="584" y="395" text-anchor="middle" fill="#555">80</text>
+<text x="642" y="395" text-anchor="middle" fill="#555">90</text>
+<text x="700" y="395" text-anchor="middle" fill="#555">100</text>
+<text x="410" y="413" text-anchor="middle" fill="#333">MAE score</text>
+<line x1="468" y1="20" x2="468" y2="383" stroke="#222" stroke-dasharray="4 3"/>
+<text x="472" y="30" fill="#222">lowerBand 60</text>
+<line x1="526" y1="20" x2="526" y2="383" stroke="#222" stroke-dasharray="4 3"/>
+<text x="530" y="46" fill="#222">upperBand 70</text>
+</svg>

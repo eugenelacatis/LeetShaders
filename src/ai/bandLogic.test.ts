@@ -8,18 +8,18 @@ import {
 
 describe('classifyByBand', () => {
   it('returns confident-pass at and above upperBand', () => {
-    expect(classifyByBand(92).kind).toBe('confident-pass');
+    expect(classifyByBand(70).kind).toBe('confident-pass');
     expect(classifyByBand(100).kind).toBe('confident-pass');
   });
 
   it('returns confident-fail strictly below lowerBand', () => {
     expect(classifyByBand(0).kind).toBe('confident-fail');
-    expect(classifyByBand(39.9).kind).toBe('confident-fail');
+    expect(classifyByBand(59.9).kind).toBe('confident-fail');
   });
 
   it('returns needs-llm in the borderline band', () => {
-    expect(classifyByBand(40).kind).toBe('needs-llm');
-    expect(classifyByBand(91.9).kind).toBe('needs-llm');
+    expect(classifyByBand(60).kind).toBe('needs-llm');
+    expect(classifyByBand(69.9).kind).toBe('needs-llm');
   });
 });
 
@@ -52,8 +52,8 @@ describe('applyBandLogic', () => {
   });
 
   it('invokes the LLM and combines scores in the borderline band', async () => {
-    const callLLM = vi.fn(async () => ({ score: 85, reasoning: 'close', flagged: false }));
-    const result = await applyBandLogic({ maeScore: 75, callLLM });
+    const callLLM = vi.fn(async () => ({ score: 95, reasoning: 'close', flagged: false }));
+    const result = await applyBandLogic({ maeScore: 65, callLLM });
     expect(result.llmInvoked).toBe(true);
     expect(result.finalScore).toBe(80);
     expect(result.passed).toBe(true);
@@ -66,7 +66,7 @@ describe('applyBandLogic', () => {
       reasoning: 'samples reference texture directly',
       flagged: true,
     }));
-    const result = await applyBandLogic({ maeScore: 80, callLLM });
+    const result = await applyBandLogic({ maeScore: 65, callLLM });
     expect(result.passed).toBe(false);
     expect(result.finalScore).toBe(0);
     expect(result.trace).toMatch(/Flagged/);

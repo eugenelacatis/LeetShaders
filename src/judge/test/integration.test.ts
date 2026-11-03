@@ -56,7 +56,7 @@ function solid(r: number, g: number, b: number): Uint8Array {
 const RED = solid(255, 0, 0);
 const BLUE = solid(0, 0, 255);
 // Perturbed: one-channel diff of 5 over tolerance 10 lands maeScore at
-// ~83, which sits inside DEFAULT_BANDS.lowerBand..upperBand and forces
+// ~83, which sits inside TEST_BANDS.lowerBand..upperBand and forces
 // the combiner to invoke the LLM thunk.
 const PERTURBED = solid(255, 5, 0);
 
@@ -73,6 +73,10 @@ const BORDERLINE_CHALLENGE: Challenge = {
 
 beforeEach(() => vi.clearAllMocks());
 
+// These tests exercise combiner mechanics, so they pin the band edges they
+// were written against instead of following DEFAULT_BANDS as it is tuned.
+const TEST_BANDS = { ...DEFAULT_BANDS, upperBand: 92, lowerBand: 40 };
+
 // ─── combiner × bandLogic ────────────────────────────────────────────────────
 // These tests prove combiner delegates to applyBandLogic end-to-end. If
 // anyone reintroduces hardcoded thresholds inside combiner, the pass/fail
@@ -87,7 +91,7 @@ describe('combiner × bandLogic — borderline band invokes LLM', () => {
 
   it('calls the LLM thunk exactly once with user+reference renders', async () => {
     const llm = vi.fn<LLMJudgeFn>(async () => ({ score: 85, reasoning: 'close', flagged: false }));
-    await judge('src', BORDERLINE_CHALLENGE, llm);
+    await judge('src', BORDERLINE_CHALLENGE, llm, TEST_BANDS);
     expect(llm).toHaveBeenCalledTimes(1);
     const arg = llm.mock.calls[0]?.[0];
     expect(arg?.userRender).toBe(RED);
@@ -100,7 +104,7 @@ describe('combiner × bandLogic — borderline band invokes LLM', () => {
     // mae = (100 - (5/3)/10 * 100) ≈ 83.3333; with DEFAULT_BANDS weights 0.5/0.5:
     // finalScore = round((83.3333 + 85) / 2) = round(84.1667) = 84, ≥ 80 → pass.
     const llm: LLMJudgeFn = async () => ({ score: 85, reasoning: 'close', flagged: false });
-    const result = await judge('src', BORDERLINE_CHALLENGE, llm);
+    const result = await judge('src', BORDERLINE_CHALLENGE, llm, TEST_BANDS);
     expect(result.breakdown.stageTwoInvoked).toBe(true);
     expect(result.maeScore).toBeCloseTo(83.333, 2);
     expect(result.llmScore).toBe(85);
@@ -111,7 +115,7 @@ describe('combiner × bandLogic — borderline band invokes LLM', () => {
   it('combines mae=83.33 with llm=70 into finalScore=77 and fails', async () => {
     // finalScore = round((83.3333 + 70) / 2) = round(76.6667) = 77, < 80 → fail.
     const llm: LLMJudgeFn = async () => ({ score: 70, reasoning: 'off', flagged: false });
-    const result = await judge('src', BORDERLINE_CHALLENGE, llm);
+    const result = await judge('src', BORDERLINE_CHALLENGE, llm, TEST_BANDS);
     expect(result.llmScore).toBe(70);
     expect(result.finalScore).toBe(77);
     expect(result.passed).toBe(false);
@@ -131,7 +135,7 @@ describe('combiner × bandLogic — flagged shader forces fail', () => {
       reasoning: 'samples reference texture',
       flagged: true,
     });
-    const result = await judge('src', BORDERLINE_CHALLENGE, llm);
+    const result = await judge('src', BORDERLINE_CHALLENGE, llm, TEST_BANDS);
     expect(result.passed).toBe(false);
     expect(result.finalScore).toBe(0);
     expect(result.breakdown.stageTwoInvoked).toBe(true);
@@ -148,7 +152,7 @@ describe('combiner — custom BandConfig overrides DEFAULT_BANDS', () => {
     const snapshot = { ...DEFAULT_BANDS };
     // Same llm=70 as the fail case above; finalScore still 77, but now threshold is 50.
     const result = await judge('src', BORDERLINE_CHALLENGE, llm, {
-      ...DEFAULT_BANDS,
+      ...TEST_BANDS,
       passThreshold: 50,
     });
     expect(result.finalScore).toBe(77);
@@ -230,7 +234,7 @@ describe('toLLMJudgeOutput adapter', () => {
       flagReason: null,
     });
     const llm: LLMJudgeFn = async () => toLLMJudgeOutput(await promptFn());
-    const result = await judge('src', BORDERLINE_CHALLENGE, llm);
+    const result = await judge('src', BORDERLINE_CHALLENGE, llm, TEST_BANDS);
     expect(result.llmScore).toBe(88);
     expect(result.breakdown.llmReasoning).toBe('looks right');
   });
@@ -255,7 +259,7 @@ describe('combiner × bandLogic — LLM failure fallback', () => {
     const llm: LLMJudgeFn = async () => {
       throw new Error('Anthropic API rate limit exceeded');
     };
-    const result = await judge('src', BORDERLINE_CHALLENGE, llm);
+    const result = await judge('src', BORDERLINE_CHALLENGE, llm, TEST_BANDS);
     // mae ≈ 83.33 ≥ 80 → pass on MAE alone. Combiner rounds finalScore.
     expect(result.passed).toBe(true);
     expect(result.maeScore).toBeCloseTo(83.333, 2);
@@ -276,7 +280,7 @@ describe('combiner × bandLogic — LLM failure fallback', () => {
     const llm: LLMJudgeFn = async () => {
       throw new Error('Network timeout');
     };
-    const result = await judge('src', BORDERLINE_CHALLENGE, llm);
+    const result = await judge('src', BORDERLINE_CHALLENGE, llm, TEST_BANDS);
     expect(result.maeScore).toBeCloseTo(50, 1);
     expect(result.maeScore).toBeLessThan(DEFAULT_BANDS.passThreshold);
     expect(result.passed).toBe(false);
@@ -291,7 +295,7 @@ describe('combiner × bandLogic — LLM failure fallback', () => {
     const llm = vi.fn<LLMJudgeFn>(async () => {
       throw new Error('should not be called');
     });
-    const result = await judge('src', BORDERLINE_CHALLENGE, llm);
+    const result = await judge('src', BORDERLINE_CHALLENGE, llm, TEST_BANDS);
     expect(result.passed).toBe(true);
     expect(result.maeScore).toBe(100);
     expect(result.breakdown.stageTwoInvoked).toBe(false);
@@ -306,9 +310,9 @@ describe('combiner × bandLogic — LLM failure fallback', () => {
     const llm = vi.fn<LLMJudgeFn>(async () => {
       throw new Error('should not be called');
     });
-    const result = await judge('src', BORDERLINE_CHALLENGE, llm);
+    const result = await judge('src', BORDERLINE_CHALLENGE, llm, TEST_BANDS);
     expect(result.passed).toBe(false);
-    expect(result.maeScore).toBeLessThan(DEFAULT_BANDS.lowerBand);
+    expect(result.maeScore).toBeLessThan(TEST_BANDS.lowerBand);
     expect(result.breakdown.stageTwoInvoked).toBe(false);
     expect(result.breakdown.llmUnavailable).toBeUndefined();
     expect(llm).not.toHaveBeenCalled();

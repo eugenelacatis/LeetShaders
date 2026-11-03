@@ -1,15 +1,30 @@
 // AI Systems & Integration. Band logic for the two-stage judge.
 // See AI_SYSTEMS.md task 3.
 //
-// This module owns the decision tree only. Judge & Rendering Lead's
-// combiner.ts (which doesn't exist yet on this branch) will call
-// `applyBandLogic` after stage-one MAE scoring and pass a thunk that
+// This module owns the decision tree only. combiner.ts calls
+// `applyBandLogic` after stage-one MAE scoring and passes a thunk that
 // invokes the LLM judge with the renders it already has in hand.
 //
-// Defaults below are the starting values suggested by AI_SYSTEMS.md
-// task 3. They get tuned against the eval harness (slice 3) and the
-// tuned values replace these constants with empirical justification
-// in the comment.
+// Band values were calibrated on 2026-11-02 against the 150 tuning
+// fixtures in src/ai/eval (see eval/CALIBRATION.md, v1):
+//
+// - upperBand 70: the highest MAE score any `wrong` tuning fixture reached
+//   was 69.1 (raymarched-sphere with flat shading; that challenge's
+//   tolerance of 20 is loose), so >= 70 never auto-passes a wrong answer.
+//   The old 92 sent correct-but-drifted shaders scoring 70-92 to the LLM,
+//   where the 0.5/0.5 combine could still fail them.
+// - lowerBand 60: the plan's rule (lowest correct/almost-correct score)
+//   gives 0, because checkerboard drift scores 0 at tolerance 4. But with
+//   maeWeight 0.5, llmWeight 0.5 and passThreshold 80, a submission needs
+//   MAE >= (80 - 0.5 * 100) / 0.5 = 60 to pass even with a perfect LLM
+//   score. Calls below 60 can only confirm a fail, so they are skipped.
+//   Revisit this floor whenever the weights or threshold change.
+//
+// Adversarial shaders that render close enough to score >= 70 (fine
+// color tables, mild prompt-injection edits) skip the LLM entirely; the
+// eval report counts them as leaks. 15 of 75 good tuning fixtures score
+// below 60 and cannot pass under any band choice: fixing that means
+// per-challenge tolerances or the combine weights, not these bands.
 
 import type { LLMJudgeOutput } from '../judge/types';
 
@@ -27,8 +42,8 @@ export interface BandConfig {
 }
 
 export const DEFAULT_BANDS: BandConfig = {
-  upperBand: 92,
-  lowerBand: 40,
+  upperBand: 70,
+  lowerBand: 60,
   maeWeight: 0.5,
   llmWeight: 0.5,
   passThreshold: 80,
