@@ -360,7 +360,7 @@ html, body {
           <strong>Solution: two-stage hybrid judge</strong><br>
           <span style="color:var(--muted);font-size:0.82rem;">
             Stage 1 &nbsp;<span class="tag easy">MAE ~5ms</span>&nbsp; fast pixel comparison &nbsp;+&nbsp;
-            Stage 2 &nbsp;<span class="tag blue">Claude Opus 4.7 ~8s</span>&nbsp; borderline only
+            Stage 2 &nbsp;<span class="tag blue">Claude Opus 5.5</span>&nbsp; borderline only
           </span>
         </div>
       </div>
@@ -384,7 +384,7 @@ html, body {
             <div class="arch-arrow">→</div>
             <div class="arch-box">mae.ts</div>
             <div class="arch-arrow" style="color:var(--muted);">|</div>
-            <div class="arch-box" style="border-color:var(--warning);color:var(--warning);">Claude 4.7</div>
+            <div class="arch-box" style="border-color:var(--warning);color:var(--warning);">Claude 5.5</div>
           </div>
           <div style="font-family:var(--font-code);font-size:0.62rem;color:var(--muted);">One WebGL pipeline. No duplicates.</div>
         </div>
@@ -761,7 +761,7 @@ monaco.languages.setMonarchTokensProvider(
           </div>
           <div class="tree-branch-col">
             <div class="tree-branch-label">40–92 borderline</div>
-            <div class="tree-node llm">Call Claude Opus 4.7</div>
+            <div class="tree-node llm">Call Claude Opus 5.5</div>
             <div class="tree-conn"></div>
             <div class="tree-branch" style="gap:16px;">
               <div class="tree-branch-col">
@@ -849,7 +849,7 @@ Return ONLY valid JSON:
       </div>
       <div style="display:flex;flex-direction:column;gap:12px;">
         <ul class="bullet-list">
-          <li>Model: <span style="font-family:var(--font-code);font-size:0.78rem;color:var(--warning);">claude-opus-4-7</span></li>
+          <li>Model: <span style="font-family:var(--font-code);font-size:0.78rem;color:var(--warning);">claude-opus-5-5</span></li>
           <li>JSON enforced via <span style="font-family:var(--font-code);font-size:0.78rem;color:var(--accent);">tool_use</span>, no free-text parsing</li>
           <li>Prompt caching on challenge desc + reference image</li>
         </ul>
@@ -894,7 +894,7 @@ Return ONLY valid JSON:
       <div style="display:flex;flex-direction:column;gap:10px;">
         <div style="font-family:var(--font-code);font-size:0.72rem;color:var(--accent);">Hint system</div>
         <ul class="bullet-list" style="font-size:0.82rem;">
-          <li>Model: <span style="font-family:var(--font-code);font-size:0.72rem;color:var(--warning);">claude-sonnet-4-6</span></li>
+          <li>Model: <span style="font-family:var(--font-code);font-size:0.72rem;color:var(--warning);">claude-sonnet-5-5</span></li>
           <li>Rate limit: 3 hints / challenge / hour</li>
           <li>"Nudge without revealing"</li>
         </ul>
@@ -996,7 +996,7 @@ if (cached !== null) {
     </div>
     <ul class="bullet-list">
       <li>Browser-native WebGL2 judge, no server GPU needed</li>
-      <li>Hybrid judge: MAE fast-path + Claude Opus 4.7 vision fallback</li>
+      <li>Hybrid judge: MAE fast-path + Claude Opus 5.5 vision fallback</li>
       <li>Monaco editor with custom GLSL tokenizer, inline error annotations</li>
       <li>Supabase RLS + Vercel serverless API proxy</li>
       <li>Eval harness: correct · almost-correct · wrong · adversarial fixtures</li>

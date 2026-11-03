@@ -12,7 +12,7 @@ You've built agent systems before and you're comfortable with iterative prompt d
 
 ### 1. LLM judge prompt
 
-Create `src/ai/judgePrompt.ts`. Uses Claude Opus 4.7 (model string `claude-opus-4-7`) for the vision call.
+Create `src/ai/judgePrompt.ts`. Uses Claude Opus 5.5 (model string `claude-opus-5-5`, defined in `src/ai/models.ts`) for the vision call.
 
 Inputs to the prompt:
 - User's rendered output as a PNG-encoded image.
@@ -108,7 +108,7 @@ Cache LLM results by `(challenge_id, sha256(shader_source))`. Same shader submit
 
 ### 4. Hint system
 
-Create `src/ai/hintPrompt.ts`. Uses Claude Sonnet 4.6 (model string `claude-sonnet-4-6`), cheaper and faster than Opus.
+Create `src/ai/hintPrompt.ts`. Uses Claude Sonnet 5.5 (model string `claude-sonnet-5-5`), cheaper and faster than Opus.
 
 Inputs:
 - User's current shader source.
@@ -147,8 +147,8 @@ Keep the schema simple, one table. Don't overbuild.
 ## Working with Claude Code
 
 - **Prompt design is iterative, treat it like research.** This is the same playbook you ran for The Echo Chamber Effect. Build the eval harness first, then iterate the prompt against it. Don't try to write the perfect prompt up front.
-- **Use opus 4.7 for the judge specifically.** Vision quality and reasoning matter more than cost here, and the call frequency is low (only borderline submissions).
-- **Use sonnet 4.6 for hints.** Lower latency, lower cost, hints are more forgiving of small quality drops.
+- **Use Opus 5.5 for the judge specifically.** Vision quality and reasoning matter more than cost here, and the call frequency is low (only borderline submissions).
+- **Use Sonnet 5.5 for hints.** Lower latency, lower cost, hints are more forgiving of small quality drops.
 - **Don't let Claude Code guess model strings.** It will suggest older names from training data. Override with the strings above.
 - **Prompt caching.** Anthropic supports prompt caching. If your judge prompt has a long system message, mark it cacheable to save cost. Worth checking the docs once you have a working prompt.
 - **JSON mode.** Use structured output enforcement so you don't have to parse free-form text. Check the current Anthropic docs for the right pattern.
