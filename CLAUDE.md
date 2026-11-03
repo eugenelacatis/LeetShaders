@@ -21,6 +21,7 @@ Think LeetCode for shader graphics. The hard problem is the judge.
 | AI judge | Anthropic Claude Opus 5.5 vision; Claude Haiku 5.5 source-only cheat check on MAE passes |
 | AI hints | Anthropic Claude Sonnet 5.5 |
 | Deployment | Vercel for frontend, Supabase hosted for backend |
+| Judge eval (dev only) | @playwright/test, headless Chromium with SwiftShader WebGL2 |
 
 Do not introduce new libraries without team agreement. If a Claude Code session suggests adding a new dependency, push back and check with the team first.
 
@@ -30,9 +31,9 @@ Three big pieces.
 
 **The render pipeline** lives in a framework-free TypeScript module owned by the Judge & Rendering Lead. It exposes a shared WebGL2 context, compiles GLSL fragment shaders, renders them to offscreen framebuffers at 512x512, and returns RGBA `Uint8Array` buffers via `readPixels`. The live preview in the editor and the submission judge both consume this same module. There is exactly one WebGL pipeline in this codebase.
 
-**The hybrid judge** runs in two stages. Stage one is MAE per channel with optional Gaussian blur pre-pass, fast and cheap. Stage two is an LLM vision call that scores visual similarity and checks the shader source for cheats (e.g. texture lookup of a reference image). The combiner skips stage two when stage one is confidently pass or fail and only invokes the LLM in the borderline band. This keeps latency and cost manageable.
+**The hybrid judge** runs in two stages. Stage one renders both shaders at four uniform samples (defaults plus three seeded random `u_time` / `u_mouse` values) and keeps the worst MAE score, with an optional Gaussian blur pre-pass. Stage two depends on that score (bands in `src/ai/bandLogic.ts`): below the lower band the submission fails with no LLM call; in the borderline band an Opus vision call scores visual similarity and inspects the source; at or above the upper band it passes after a cheap source-only cheat check by Haiku. Either model flagging cheating fails the submission.
 
-**The challenge bank** is a folder of `.glsl` reference shaders plus `.json` metadata, seeded into Supabase. Each challenge has its own tolerance value, hand-tuned by the content author.
+**The challenge bank** is a folder of `.glsl` reference shaders plus `.json` metadata, seeded into Supabase. Each challenge has its own tolerance, calibrated against the eval fixtures in `src/ai/eval/` (`npx tsx src/ai/eval/run.ts --mae-only --set=tuning` prints the derivation; method in `src/ai/eval/CALIBRATION.md`). Reseed Supabase after changing one.
 
 ## Shared interfaces
 
@@ -60,6 +61,8 @@ interface JudgeResult {
     maeRaw: number;
     llmReasoning?: string;
     stageTwoInvoked: boolean;
+    llmUnavailable?: boolean;
+    cheatCheckInvoked?: boolean;
   };
   renderLatencyMs: number;
   judgeLatencyMs: number;
@@ -77,6 +80,7 @@ src/
     mae.ts        # stage one scoring
     llm.ts        # stage two LLM judge interface (impl by AI Systems)
     combiner.ts   # decides which stages run (impl by AI Systems)
+    uniforms.ts   # seeded uniform samples for stage one
     types.ts      # Challenge, JudgeResult
     test/         # standalone HTML + Vitest harness
   editor/         # owned by Editor & UI Lead
@@ -88,9 +92,12 @@ src/
     ChallengeList.tsx
     ChallengePage.tsx
   ai/             # owned by AI Systems & Integration
+    models.ts     # model strings, the only place they are defined
+    judgeRequest.ts  # judge + cheat-check prompts, shared by production and eval
     judgePrompt.ts
     hintPrompt.ts
-    eval/         # prompt calibration harness + fixtures
+    bandLogic.ts  # bands, weights, pass threshold
+    eval/         # judge eval harness, fixtures, CALIBRATION.md
   backend/        # owned by Content & Backend
     supabase.ts
     useAuth.ts
@@ -99,11 +106,12 @@ src/
     [slug].glsl
     [slug].json
     [slug].md
+api/
+  anthropic.ts    # Vercel proxy; holds ANTHROPIC_API_KEY, the browser never does
 ```
 
 ## Working with Claude Code, conventions for everyone
 
-- **Read this file first** in every new Claude Code session. Paste it in or reference it. The model needs the architecture context.
 - **Read your own role-specific .md** second. Your tasks live there.
 - **One pipeline rule.** The live preview and the judge consume the same compile path. If Claude Code starts writing a second WebGL context manager, stop it.
 - **Lock the contract first.** The `Challenge` and `JudgeResult` types above are the integration seam. Do not let Claude Code drift them silently.
@@ -144,8 +152,8 @@ Stretch goals from the original proposal (community submissions, animated challe
 ## Risks to keep in mind
 
 - **GPU/driver variance.** Same shader renders slightly differently across machines. The LLM judge stage absorbs this; MAE alone does not. Do not over-tighten MAE tolerances.
-- **LLM latency and cost.** Every borderline submission is an API call. Cache aggressively by `(challenge_id, shader_hash)`.
-- **Adversarial shaders.** A user can sample a hardcoded texture of the reference. The LLM judge prompt must inspect the shader source, not just the render.
+- **LLM latency and cost.** Every borderline submission is an Opus call and every MAE pass is a Haiku call. Both are cached by `(challenge_id, shader_hash)`.
+- **Adversarial shaders.** Users can bake the reference into a color table, match it only at default uniforms, or write comments addressed to the grader. The prompts treat shader source as untrusted input, and the eval fixtures in `src/ai/eval/fixtures/adversarial/` cover each attack.
 - **Authoring time.** Writing a good challenge with a calibrated tolerance is harder than writing the shader. Budget accordingly.
 
 ## When in doubt
