@@ -15,7 +15,9 @@ function getInitialMode(): Mode {
   try {
     const saved = localStorage.getItem('ls_theme_mode');
     if (saved === 'light' || saved === 'dark') return saved;
-  } catch {}
+  } catch {
+    // localStorage can throw (private mode, blocked storage); use the default.
+  }
   return 'dark';
 }
 
@@ -30,7 +32,11 @@ export const useThemeStore = create<ThemeState>((set) => ({
     set((state) => {
       const next: Mode = state.mode === 'dark' ? 'light' : 'dark';
       setColorMode(next);
-      try { localStorage.setItem('ls_theme_mode', next); } catch {}
+      try {
+        localStorage.setItem('ls_theme_mode', next);
+      } catch {
+        // Not persisting the theme is fine; it still applies for this session.
+      }
       return {
         mode: next,
         colors: next === 'dark' ? darkColors : lightColors,

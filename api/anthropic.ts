@@ -24,15 +24,32 @@ interface AnthropicCallOutput {
 const FALLBACK_MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5']);
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
-function send(res: any, status: number, body: unknown) {
+// Minimal shapes for what this handler touches. The file stays CJS with no
+// imports, so it can't pull in node:http or SDK types.
+interface Req {
+  method?: string;
+  body?: AnthropicCallInput;
+  on(event: 'data' | 'end' | 'error', listener: (arg?: Buffer | Error) => void): void;
+}
+interface Res {
+  writeHead(status: number, headers: Record<string, string>): void;
+  end(body: string): void;
+}
+interface ApiMessage {
+  stop_reason: string | null;
+  content: { type: string; text?: string }[];
+  usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null };
+}
+
+function send(res: Res, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }
 
-function readBody(req: any): Promise<AnthropicCallInput> {
+function readBody(req: Req): Promise<AnthropicCallInput> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('data', (c) => chunks.push(c as Buffer));
     req.on('end', () => {
       try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
       catch { reject(new Error('bad json')); }
@@ -47,12 +64,11 @@ function toBlock(block: ContentBlock): unknown {
     return cache ? { type: 'text', text: block.text, cache_control: cache }
                  : { type: 'text', text: block.text };
   }
-  const b: any = { type: 'image', source: { type: 'base64', media_type: block.mediaType, data: block.base64 } };
-  if (cache) b.cache_control = cache;
-  return b;
+  const source = { type: 'base64', media_type: block.mediaType, data: block.base64 };
+  return cache ? { type: 'image', source, cache_control: cache } : { type: 'image', source };
 }
 
-module.exports = async function handler(req: any, res: any) {
+module.exports = async function handler(req: Req, res: Res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -71,7 +87,7 @@ module.exports = async function handler(req: any, res: any) {
   const client = new Anthropic({ apiKey });
   const start = Date.now();
 
-  const params: any = {
+  const params: Record<string, unknown> = {
     model: body.model,
     system: body.system,
     max_tokens: body.maxTokens,
@@ -89,14 +105,15 @@ module.exports = async function handler(req: any, res: any) {
   const fallback = FALLBACK_MODELS.has(body.model);
   if (fallback) params.fallbacks = 'default';
 
-  let message: any;
+  let message: ApiMessage;
   try {
     message = await client.messages.create(
       params,
       fallback ? { headers: { 'anthropic-beta': FALLBACK_BETA } } : undefined,
     );
-  } catch (err: any) {
-    return send(res, err?.status ?? 502, { error: err?.message ?? 'Anthropic request failed' });
+  } catch (err) {
+    const e = err as { status?: number; message?: string };
+    return send(res, e.status ?? 502, { error: e.message ?? 'Anthropic request failed' });
   }
   const latencyMs = Date.now() - start;
 
@@ -104,14 +121,14 @@ module.exports = async function handler(req: any, res: any) {
   if (message.stop_reason === 'max_tokens') return send(res, 502, { error: `${body.model} hit max_tokens before finishing` });
 
   // Responses can start with thinking blocks; read the text block by type.
-  const text: string = message.content.find((b: any) => b.type === 'text')?.text ?? '';
+  const text: string = message.content.find((b) => b.type === 'text')?.text ?? '';
   let content: unknown = text;
   if (body.jsonSchema) {
     try { content = JSON.parse(text); }
     catch { return send(res, 502, { error: 'Model returned invalid JSON' }); }
   }
 
-  const usage: any = message.usage;
+  const usage = message.usage;
   const output: AnthropicCallOutput = {
     content,
     inputTokens: usage.input_tokens,

@@ -45,7 +45,9 @@ function getSolvedSet(): Set<string> {
         }
       }
     }
-  } catch {}
+  } catch {
+    // localStorage can throw (private mode, blocked storage); show nothing as solved.
+  }
   return solved;
 }
 
