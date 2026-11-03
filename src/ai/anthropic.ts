@@ -10,10 +10,9 @@
 // suggest older names from training data; override at call sites by
 // importing JUDGE_MODEL or HINT_MODEL.
 
-export const JUDGE_MODEL = 'claude-opus-4-7';
-export const HINT_MODEL = 'claude-sonnet-4-6';
+import type { AnthropicModel } from './models';
 
-export type AnthropicModel = typeof JUDGE_MODEL | typeof HINT_MODEL;
+export { JUDGE_MODEL, HINT_MODEL, type AnthropicModel } from './models';
 
 export interface TextContent {
   type: 'text';

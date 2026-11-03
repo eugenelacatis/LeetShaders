@@ -72,7 +72,7 @@ describe('llmJudge', () => {
     expect(body.model).toBe(JUDGE_MODEL);
     expect(body.system).toBe(JUDGE_SYSTEM_PROMPT);
     expect(body.jsonSchema).toBeDefined();
-    expect(body.jsonSchema.name).toBe('judge_output');
+    expect(body.jsonSchema.name).toBe('record_verdict');
   });
 
   it('sends both renders as base64 images in the content blocks', async () => {

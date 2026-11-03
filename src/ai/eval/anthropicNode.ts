@@ -9,20 +9,21 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-export const JUDGE_MODEL = 'claude-opus-4-7';
-export const HINT_MODEL = 'claude-sonnet-4-6';
+import type { AnthropicModel } from '../models';
 
-export type AnthropicModel = typeof JUDGE_MODEL | typeof HINT_MODEL;
+export { JUDGE_MODEL, HINT_MODEL, type AnthropicModel } from '../models';
 
 export interface TextBlock {
   type: 'text';
   text: string;
+  cacheControl?: 'ephemeral';
 }
 
 export interface ImageBlock {
   type: 'image';
   mediaType: 'image/png' | 'image/jpeg';
   base64: string;
+  cacheControl?: 'ephemeral';
 }
 
 export type ContentBlock = TextBlock | ImageBlock;
@@ -50,8 +51,16 @@ export interface CallOutput<T = string> {
   content: T;
   inputTokens: number;
   outputTokens: number;
+  /** Prompt-cache tokens. SDK 0.32 doesn't type these on Usage, but the API returns them. */
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
   latencyMs: number;
 }
+
+type UsageWithCache = Anthropic.Messages.Usage & {
+  cache_creation_input_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+};
 
 function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -66,12 +75,16 @@ function getClient(): Anthropic {
 function toSdkContent(
   block: ContentBlock,
 ): Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam {
+  // Forward cache markers the same way api/anthropic.ts does, so eval
+  // token costs match production.
+  const cache = block.cacheControl === 'ephemeral' ? { cache_control: { type: 'ephemeral' as const } } : {};
   if (block.type === 'text') {
-    return { type: 'text', text: block.text };
+    return { type: 'text', text: block.text, ...cache };
   }
   return {
     type: 'image',
     source: { type: 'base64', media_type: block.mediaType, data: block.base64 },
+    ...cache,
   };
 }
 
@@ -124,10 +137,13 @@ export async function callAnthropicNode<T = string>(
     content = textBlock.text as unknown as T;
   }
 
+  const usage = message.usage as UsageWithCache;
   return {
     content,
-    inputTokens: message.usage.input_tokens,
-    outputTokens: message.usage.output_tokens,
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+    cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
     latencyMs,
   };
 }

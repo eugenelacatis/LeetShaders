@@ -12,5 +12,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "src/backend/seed.ts", "src/ai/eval/**/*.ts"]
+  "include": ["vite.config.ts", "src/backend/seed.ts", "src/ai/eval/**/*.ts"],
+  "exclude": ["src/ai/eval/browser/**", "src/ai/eval/**/*.test.ts"]
 }
