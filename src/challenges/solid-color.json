@@ -4,7 +4,7 @@
   "title": "Sky Blue",
   "description": "Render a solid 'Sky Blue' color across the entire canvas. The target RGB value is (135, 206, 235).",
   "difficulty": "beginner",
-  "tolerance": 5.0,
+  "tolerance": 52.8,
   "useBlur": false,
   "hintText": "Use gl_FragColor (or fragColor in WebGL2) to set the output color. Remember to normalize your RGB values by dividing them by 255.0."
 }

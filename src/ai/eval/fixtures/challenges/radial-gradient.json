@@ -1,0 +1,9 @@
+{
+  "id": "radial-gradient",
+  "slug": "radial-gradient",
+  "title": "Cosmic Core",
+  "description": "Create a radial gradient that starts as pure white in the center and transitions to a deep purple (0.2, 0.0, 0.4) towards the edges. The gradient should be circular, even if the screen is rectangular.",
+  "difficulty": "intermediate",
+  "tolerance": 59.1,
+  "useBlur": true
+}

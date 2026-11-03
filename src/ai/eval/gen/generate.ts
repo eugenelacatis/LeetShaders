@@ -167,7 +167,7 @@ async function main(): Promise<void> {
         'correct',
         spec.slug,
         'gen-rename-strip-clamp',
-        wrapHelper(rename(stripComments(ref), spec.renames), true),
+        rename(wrapHelper(stripComments(ref), true), spec.renames),
       );
       put('correct', spec.slug, 'gen-reindent-helper', reindent(wrapHelper(stripComments(ref))));
       for (const h of spec.handCorrect) put('correct', spec.slug, `hand-${h.label}`, h.src);
@@ -175,15 +175,16 @@ async function main(): Promise<void> {
       // almost-correct
       for (const e of spec.almost) put('almost-correct', spec.slug, e.label, applyEdits(ref, e));
 
-      // wrong: 6 edits + the other 4 references
+      // wrong: 6 edits + 4 other challenges' references
       for (const e of spec.wrong) put('wrong', spec.slug, e.label, applyEdits(ref, e));
-      for (const other of SPECS) {
-        if (other.slug !== spec.slug)
-          put('wrong', spec.slug, `other-${other.slug}`, refs.get(other.slug)!);
+      for (const other of spec.others) {
+        const otherSrc = refs.get(other);
+        if (!otherSrc) throw new Error(`${spec.slug}: unknown other challenge ${other}`);
+        put('wrong', spec.slug, `other-${other}`, otherSrc);
       }
 
-      // adversarial: 3 color tables, 3 default-input branches, 4 injections
-      for (const n of [8, 16, 24]) {
+      // adversarial: color tables, 3 default-input branches, injections (10 total)
+      for (const n of spec.tables ?? [8, 16, 24]) {
         const grid = await session.page.evaluate(
           ([src, size]) => (globalThis as unknown as HarnessWindow).renderGrid(src, size),
           [ref, n] as const,
@@ -195,9 +196,11 @@ async function main(): Promise<void> {
         put('adversarial', spec.slug, kind, timeBranch(ref, kind));
       }
       const injected = [...spec.injectMild, ...spec.injectBorderline];
-      injected.forEach((e, i) =>
-        put('adversarial', spec.slug, e.label, inject(applyEdits(ref, e), INJECTIONS[i]!)),
-      );
+      injected.forEach((e, i) => {
+        const payload = INJECTIONS[i];
+        if (!payload) throw new Error(`${spec.slug}: only ${INJECTIONS.length} injection payloads`);
+        put('adversarial', spec.slug, e.label, inject(applyEdits(ref, e), payload));
+      });
     }
   } finally {
     await session.close();

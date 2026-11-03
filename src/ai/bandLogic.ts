@@ -6,7 +6,7 @@
 // invokes the LLM judge with the renders it already has in hand.
 //
 // Band values and per-challenge tolerances were calibrated together on
-// 2026-11-02 against the 150 tuning fixtures in src/ai/eval (see
+// 2026-11-02 against the tuning fixtures in src/ai/eval (see
 // eval/CALIBRATION.md, v1):
 //
 // - lowerBand 60: with maeWeight 0.5, llmWeight 0.5 and passThreshold 80,
