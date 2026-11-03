@@ -23,6 +23,8 @@ import { judge } from '../judge/combiner';
 import { llmJudge } from '../judge/llm';
 import { computeMAEResult } from '../judge/mae';
 import { compileAndRender } from '../judge/pipeline';
+import { sampleUniforms, freshSeed } from '../judge/uniforms';
+import { DEFAULT_BANDS } from '../ai/bandLogic';
 import { useColors } from '../hooks/useColors';
 import type { ColorPalette } from '../theme';
 import type { PipelineError } from '../judge/types';
@@ -239,7 +241,7 @@ export default function ChallengePage() {
       const judgeResult = await judge(src, challenge, async (input) => {
         setSubmitStage('Running AI visual analysis...');
         return llmJudge(input);
-      });
+      }, DEFAULT_BANDS, sampleUniforms(freshSeed()));
       setResultData({ kind: 'submit', result: judgeResult });
 
       const record: SubmissionRecord = {
