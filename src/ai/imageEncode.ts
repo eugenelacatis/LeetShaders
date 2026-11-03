@@ -24,18 +24,30 @@ export async function rgbaToPngBase64(
   return arrayBufferToBase64(arrayBuffer);
 }
 
+/**
+ * readPixels returns rows bottom-up (GL origin is the bottom-left); images
+ * are stored top-down. Reverse the row order so the PNG shows the render
+ * the right way up. Pure, exported for tests.
+ */
+export function flipRowsToTopDown(rgba: Uint8Array, width: number, height: number): Uint8ClampedArray<ArrayBuffer> {
+  const rowBytes = width * 4;
+  const out = new Uint8ClampedArray(new ArrayBuffer(rgba.length));
+  for (let y = 0; y < height; y++) {
+    const src = (height - 1 - y) * rowBytes;
+    out.set(rgba.subarray(src, src + rowBytes), y * rowBytes);
+  }
+  return out;
+}
+
 async function renderToPngBlob(
   rgba: Uint8Array,
   width: number,
   height: number,
 ): Promise<Blob> {
-  // Allocate a fresh ArrayBuffer-backed view so the resulting
-  // Uint8ClampedArray<ArrayBuffer> satisfies ImageData's constructor
-  // type. Copying from the input is required anyway because the
-  // source buffer may be SharedArrayBuffer-backed under TS 5.7.
-  const clamped = new Uint8ClampedArray(new ArrayBuffer(rgba.length));
-  clamped.set(rgba);
-  const imageData = new ImageData(clamped, width, height);
+  // The flip copies into a fresh ArrayBuffer-backed view, which also
+  // satisfies ImageData's constructor type (the source buffer may be
+  // SharedArrayBuffer-backed under TS 5.7).
+  const imageData = new ImageData(flipRowsToTopDown(rgba, width, height), width, height);
 
   if (typeof OffscreenCanvas !== 'undefined') {
     const canvas = new OffscreenCanvas(width, height);
