@@ -2,6 +2,7 @@ import { Component } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
 import { Box, Button, Typography } from '@mui/material';
 import { useThemeStore } from '../store/themeStore';
+import { tokens } from '../tokens';
 
 interface Props { children: ReactNode }
 interface State { error: Error | null }
@@ -29,7 +30,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             component="pre"
             sx={{
               fontSize: '0.78rem',
-              fontFamily: '"JetBrains Mono", monospace',
+              fontFamily: tokens.font.mono,
               color: colors.textSecondary,
               whiteSpace: 'pre-wrap',
               mb: 3,

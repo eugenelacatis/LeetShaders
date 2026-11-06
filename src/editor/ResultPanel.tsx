@@ -41,7 +41,7 @@ function RunResultView({ mae, score }: { mae: number; score: number }) {
         <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: statusColor }}>
           {statusLabel}
         </Typography>
-        <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: colors.textPrimary, ml: 'auto', fontFamily: '"JetBrains Mono", monospace' }}>
+        <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: colors.textPrimary, ml: 'auto' }}>
           {score}
         </Typography>
       </Box>
@@ -68,7 +68,7 @@ function SubmitResultView({ result }: { result: JudgeResult }) {
         <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: statusColor }}>
           {result.passed ? 'Accepted' : 'Wrong Answer'}
         </Typography>
-        <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: colors.textPrimary, ml: 'auto', fontFamily: '"JetBrains Mono", monospace' }}>
+        <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: colors.textPrimary, ml: 'auto' }}>
           {result.finalScore}
         </Typography>
       </Box>
@@ -86,7 +86,7 @@ function SubmitResultView({ result }: { result: JudgeResult }) {
           <Typography sx={{ fontSize: '0.6rem', color: colors.textTertiary, mb: 0.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Reasoning
           </Typography>
-          <Typography sx={{ fontSize: '0.72rem', color: colors.textSecondary, lineHeight: 1.5, fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap' }}>
+          <Typography sx={{ fontSize: '0.72rem', color: colors.textSecondary, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
             {result.breakdown.llmReasoning}
           </Typography>
         </Box>
@@ -109,7 +109,7 @@ function ScoreItem({ label, value }: { label: string; value: string }) {
   return (
     <Box sx={{ px: 1.5, py: 0.75, borderRadius: 0.5, backgroundColor: colors.bg, border: `1px solid ${colors.border}` }}>
       <Typography sx={{ fontSize: '0.58rem', color: colors.textTertiary, mb: 0.25 }}>{label}</Typography>
-      <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: colors.textPrimary, fontFamily: '"JetBrains Mono", monospace' }}>{value}</Typography>
+      <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: colors.textPrimary }}>{value}</Typography>
     </Box>
   );
 }

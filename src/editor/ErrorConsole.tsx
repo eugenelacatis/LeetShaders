@@ -2,6 +2,7 @@ import { Box, Collapse, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useColors } from '../hooks/useColors';
 import type { PipelineError } from '../judge/types';
+import { tokens } from '../tokens';
 
 interface ErrorConsoleProps {
   errors: PipelineError[];
@@ -51,7 +52,7 @@ export default function ErrorConsole({ errors, onJumpToLine }: ErrorConsoleProps
           sx={{
             px: 2,
             py: 1,
-            fontFamily: '"JetBrains Mono", monospace',
+            fontFamily: tokens.font.mono,
             fontSize: '0.7rem',
             listStyle: 'none',
             m: 0,

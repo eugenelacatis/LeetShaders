@@ -1,63 +1,74 @@
-import { Box, IconButton, Typography } from '@mui/material';
-import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
-import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import { Box, Typography } from '@mui/material';
 import { Link, useLocation } from 'react-router-dom';
 import { useColors } from '../hooks/useColors';
-import { useThemeStore } from '../store/themeStore';
+import { tokens } from '../tokens';
+
+const NAV_HEIGHT = 60;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const isLanding = location.pathname === '/';
   const colors = useColors();
-  const mode = useThemeStore((s) => s.mode);
-  const toggle = useThemeStore((s) => s.toggle);
+  const onChallenges = location.pathname.startsWith('/challenges');
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: colors.bg }}>
-      {!isLanding && (
-        <Box
-          component="nav"
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: colors.bg,
+      }}
+    >
+      <Box
+        component="nav"
+        sx={{
+          height: NAV_HEIGHT,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 3,
+          px: { xs: 2, md: 4 },
+          borderBottom: `${tokens.border} solid ${tokens.color.edge}`,
+          backgroundColor: colors.bg,
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+        }}
+      >
+        <Typography
+          component={Link}
+          to="/"
           sx={{
-            height: 48,
-            display: 'flex',
-            alignItems: 'center',
-            px: 2,
-            borderBottom: `1px solid ${colors.border}`,
-            backgroundColor: colors.bg,
-            position: 'sticky',
-            top: 0,
-            zIndex: 100,
+            textDecoration: 'none',
+            fontWeight: 800,
+            fontSize: '1.25rem',
+            color: colors.textPrimary,
+            letterSpacing: '-0.04em',
           }}
         >
-          <Typography
-            component={Link}
-            to="/"
-            sx={{
-              textDecoration: 'none',
-              fontFamily: '"Space Grotesk", sans-serif',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              color: colors.textPrimary,
-              letterSpacing: '-0.02em',
-            }}
-          >
-            LeetShaders
-          </Typography>
+          LeetShaders
+        </Typography>
 
-          <Box sx={{ flex: 1 }} />
+        <Box sx={{ flex: 1 }} />
 
-          <IconButton
-            onClick={toggle}
-            size="small"
-            sx={{ color: colors.textSecondary, '&:hover': { color: colors.textPrimary } }}
-          >
-            {mode === 'dark'
-              ? <LightModeOutlinedIcon sx={{ fontSize: 18 }} />
-              : <DarkModeOutlinedIcon sx={{ fontSize: 18 }} />
-            }
-          </IconButton>
-        </Box>
-      )}
+        <Typography
+          component={Link}
+          to="/challenges"
+          aria-current={onChallenges ? 'page' : undefined}
+          sx={{
+            textDecoration: 'none',
+            fontWeight: 600,
+            fontSize: tokens.type.label.size,
+            color: onChallenges ? colors.textPrimary : colors.textSecondary,
+            minHeight: tokens.minTapTarget,
+            display: 'inline-flex',
+            alignItems: 'center',
+            borderBottom: `${tokens.border} solid ${onChallenges ? tokens.color.red : 'transparent'}`,
+            '&:hover': { color: colors.textPrimary },
+          }}
+        >
+          Challenges
+        </Typography>
+      </Box>
       <Box sx={{ flex: 1 }}>{children}</Box>
     </Box>
   );

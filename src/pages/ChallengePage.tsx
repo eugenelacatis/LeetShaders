@@ -30,6 +30,7 @@ import { DEFAULT_BANDS } from '../ai/bandLogic';
 import { useColors } from '../hooks/useColors';
 import type { ColorPalette } from '../theme';
 import type { PipelineError } from '../judge/types';
+import { tokens } from '../tokens';
 
 const STARTER = `#version 300 es
 precision highp float;
@@ -280,7 +281,7 @@ export default function ChallengePage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 48px)' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 60px)' }}>
         <CircularProgress size={20} sx={{ color: colors.accent }} />
       </Box>
     );
@@ -298,7 +299,7 @@ export default function ChallengePage() {
   const tabs = ['description', 'solution', 'submissions'] as const;
 
   return (
-    <Box sx={{ height: 'calc(100vh - 48px)', display: 'flex', overflow: 'hidden' }}>
+    <Box sx={{ height: 'calc(100vh - 60px)', display: 'flex', overflow: 'hidden' }}>
 
       {/* Left */}
       <Box sx={{ width: leftWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -307,7 +308,7 @@ export default function ChallengePage() {
             <Button component={Link} to="/challenges" size="small" sx={{ minWidth: 0, p: 0.25, color: colors.textTertiary, '&:hover': { color: colors.textPrimary } }}>
               <ArrowBackIcon sx={{ fontSize: 14 }} />
             </Button>
-            <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: colors.textPrimary, fontFamily: '"Space Grotesk", sans-serif' }}>
+            <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: colors.textPrimary, fontFamily: tokens.font.sans }}>
               {challenge.title}
             </Typography>
           </Box>
@@ -361,7 +362,7 @@ export default function ChallengePage() {
                     { name: 'u_mouse', type: 'vec2', desc: 'Mouse position (px)' },
                   ].map((u) => (
                     <Box component="li" key={u.name} sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                      <Typography sx={{ fontSize: '0.72rem', fontFamily: '"JetBrains Mono", monospace', color: colors.accent, fontWeight: 500 }}>{u.name}</Typography>
+                      <Typography sx={{ fontSize: '0.72rem', fontFamily: tokens.font.mono, color: colors.accent, fontWeight: 500 }}>{u.name}</Typography>
                       <Typography sx={{ fontSize: '0.62rem', color: colors.textTertiary }}>{u.type}</Typography>
                       <Typography sx={{ fontSize: '0.62rem', color: colors.textSecondary, ml: 'auto' }}>{u.desc}</Typography>
                     </Box>
@@ -401,7 +402,7 @@ export default function ChallengePage() {
                     <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: h.passed ? colors.success : colors.danger }}>
                       {h.passed ? 'Accepted' : 'Failed'}
                     </Typography>
-                    <Typography sx={{ fontSize: '0.72rem', color: colors.textPrimary, fontFamily: '"JetBrains Mono", monospace' }}>
+                    <Typography sx={{ fontSize: '0.72rem', color: colors.textPrimary }}>
                       {h.score}
                     </Typography>
                     <Typography sx={{ fontSize: '0.62rem', color: colors.textTertiary, ml: 'auto' }}>
@@ -466,7 +467,7 @@ export default function ChallengePage() {
             {submitting ? 'Judging...' : 'Submit'}
           </Button>
 
-          <Typography sx={{ ml: 'auto', fontSize: '0.65rem', color: colors.textTertiary, fontFamily: '"JetBrains Mono", monospace' }}>
+          <Typography sx={{ ml: 'auto', fontSize: '0.65rem', color: colors.textTertiary }}>
             GLSL ES 3.0
           </Typography>
         </Box>
