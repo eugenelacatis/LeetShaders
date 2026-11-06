@@ -36,3 +36,6 @@ CONTRIBUTION_REPORT_NEIL.md
 # Judge eval harness: renders and raw run dumps are regenerated each run
 src/ai/eval/fixtures/**/*.png
 src/ai/eval/out/live-*.json
+
+# Playwright MCP screenshots and logs
+.playwright-mcp/

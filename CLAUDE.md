@@ -1,6 +1,8 @@
 # LeetShaders, Project Context
 
-This file is shared context for every team member and every Claude Code session on this repo. Read it before starting work.
+This file is context for every Claude Code session on this repo. Read it before starting work.
+
+This is Eugene's fork of the original team project, maintained solo as a portfolio piece. The team roles, Discord sign-off, and ownership notes below describe the original project. They don't block changes here: Eugene decides dependencies, contracts, and scope.
 
 ## What we are building
 
@@ -8,14 +10,14 @@ LeetShaders is a browser-native GLSL shader coding challenge platform. Users wri
 
 Think LeetCode for shader graphics. The hard problem is the judge.
 
-## Tech stack, locked
+## Tech stack
 
 | Layer | Choice |
 | --- | --- |
 | Frontend framework | React 19, Vite |
 | Code editor | @monaco-editor/react v4.7.0, GLSL registered manually |
 | WebGL runtime | Raw WebGL2, no abstraction |
-| UI | Material UI v7.3.9 |
+| UI | Material UI v7.3.9 (optional; can be replaced or removed) |
 | State | Zustand 5.0.5 |
 | Backend | Supabase, Auth plus Postgres |
 | AI judge | Anthropic Claude Opus 5.5 vision; Claude Haiku 5.5 source-only cheat check on MAE passes |
@@ -23,7 +25,7 @@ Think LeetCode for shader graphics. The hard problem is the judge.
 | Deployment | Vercel for frontend, Supabase hosted for backend |
 | Judge eval (dev only) | @playwright/test, headless Chromium with SwiftShader WebGL2 |
 
-Do not introduce new libraries without team agreement. If a Claude Code session suggests adding a new dependency, push back and check with the team first.
+New libraries are fine when they earn their place. Say what you're adding and why in one line, then add it.
 
 ## Architecture overview
 
@@ -69,7 +71,7 @@ interface JudgeResult {
 }
 ```
 
-If you need to add a field, talk to the Judge & Rendering Lead first.
+Changing these types is allowed. Update every consumer in the same change.
 
 ## Repo layout
 
@@ -117,7 +119,7 @@ api/
 - **Lock the contract first.** The `Challenge` and `JudgeResult` types above are the integration seam. Do not let Claude Code drift them silently.
 - **Prefer scaffolding standalone.** When a module has a clear contract (judge, prompts, challenge files), build it in isolation with a test harness before integrating. This is faster than fighting React lifecycle while debugging WebGL or LLM calls.
 - **Verify model strings.** The current Anthropic models are `claude-opus-5-5` (judge), `claude-sonnet-5-5` (hints), and `claude-haiku-5-5` (cheat check), defined once in `src/ai/models.ts`. Claude Code may suggest older model names from its training data. Override.
-- **Material UI v7 has API differences from v5.** Feed Claude Code the v7 docs URL when scaffolding components.
+- **Material UI v7 has API differences from v5.** While MUI is still in use, check the v7 docs when scaffolding components.
 - **Supabase RLS.** Do not skip row-level security. Even though scoring is client-side, solve records and user data need policies.
 
 ## Code style
@@ -137,7 +139,6 @@ api/
 
 - Discord for sync, Notion for async progress.
 - If you are blocked on someone else's interface, post in Discord and tag them. Do not silently work around it, that creates integration debt.
-- The `Challenge` and `JudgeResult` contracts are the most likely friction point. If you want to change them, propose in Discord, do not just edit the file.
 
 ## Milestones
 
@@ -158,4 +159,4 @@ Stretch goals from the original proposal (community submissions, animated challe
 
 ## When in doubt
 
-Ask in Discord before changing a shared interface, adding a dependency, or expanding scope. The project is bounded; new ideas go in the "future work" file, not in this sprint.
+Ask Eugene before expanding scope. New ideas go in the "future work" file, not in this sprint.
