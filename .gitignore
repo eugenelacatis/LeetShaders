@@ -39,3 +39,6 @@ src/ai/eval/out/live-*.json
 
 # Playwright MCP screenshots and logs
 .playwright-mcp/
+
+# Supabase CLI local cache
+supabase/.temp/
