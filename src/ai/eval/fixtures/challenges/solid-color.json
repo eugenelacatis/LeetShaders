@@ -4,6 +4,7 @@
   "title": "Sky Blue",
   "description": "Render a solid 'Sky Blue' color across the entire canvas. The target RGB value is (135, 206, 235).",
   "difficulty": "beginner",
+  "track": "color",
   "tolerance": 52.8,
   "useBlur": false
 }

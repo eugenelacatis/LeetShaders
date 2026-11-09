@@ -29,6 +29,7 @@ const CHALLENGE: Challenge = {
   title: 'Circle SDF',
   description: 'Draw a hard-edged circle using a signed distance field.',
   difficulty: 'beginner',
+  track: 'shapes',
   referenceShaderSrc: 'void main() {}',
   tolerance: 10,
   useBlur: false,

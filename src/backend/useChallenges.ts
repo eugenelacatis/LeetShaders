@@ -41,10 +41,12 @@ export function useChallenges(): UseChallengesResult {
         title: r.title as string,
         description: r.description as string,
         difficulty: r.difficulty as Challenge['difficulty'],
+        track: r.track as Challenge['track'],
         referenceShaderSrc: r.reference_shader_src as string,
         tolerance: r.tolerance as number,
         useBlur: r.use_blur as boolean,
         hintText: (r.hint_text as string) ?? undefined,
+        source: (r.source as Challenge['source']) ?? undefined,
       }));
 
       setData(challenges);
@@ -98,10 +100,12 @@ export function useChallenge(slug: string): UseChallengeResult {
         title: row.title as string,
         description: row.description as string,
         difficulty: row.difficulty as Challenge['difficulty'],
+        track: row.track as Challenge['track'],
         referenceShaderSrc: row.reference_shader_src as string,
         tolerance: row.tolerance as number,
         useBlur: row.use_blur as boolean,
         hintText: (row.hint_text as string) ?? undefined,
+        source: (row.source as Challenge['source']) ?? undefined,
       });
       setLoading(false);
     }

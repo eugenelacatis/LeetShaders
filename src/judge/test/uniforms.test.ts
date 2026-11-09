@@ -31,7 +31,7 @@ const REFERENCE_SRC = 'reference';
 const TIME_BRANCH_SRC = 'if (u_time == 0.0) { reference } else { wrong }';
 
 const CHALLENGE: Challenge = {
-  id: 'c', slug: 'c', title: 'C', description: '', difficulty: 'beginner',
+  id: 'c', slug: 'c', title: 'C', description: '', difficulty: 'beginner', track: 'shapes',
   referenceShaderSrc: REFERENCE_SRC, tolerance: 10, useBlur: false,
 };
 

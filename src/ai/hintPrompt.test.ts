@@ -16,6 +16,7 @@ const challenge: Challenge = {
   title: 'Starter',
   description: 'Fill the screen with a gradient.',
   difficulty: 'beginner',
+  track: 'shapes',
   referenceShaderSrc: 'void main() { gl_FragColor = vec4(1.0); }',
   tolerance: 0.1,
   useBlur: false,

@@ -39,7 +39,7 @@ const BLACK = solid(0,   0,   0);
 
 const CHALLENGE: Challenge = {
   id: 'test', slug: 'test', title: 'Test', description: '',
-  difficulty: 'beginner', referenceShaderSrc: 'ref', tolerance: 10, useBlur: false,
+  difficulty: 'beginner', track: 'shapes', referenceShaderSrc: 'ref', tolerance: 10, useBlur: false,
 };
 
 const stubLLM: LLMJudgeFn = async () => ({ score: 75, reasoning: 'stub', flagged: false });

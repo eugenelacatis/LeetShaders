@@ -1,13 +1,27 @@
+/** Tracks in learning order. Each challenge belongs to exactly one. */
+export const TRACKS = ['color', 'shapes', 'combining', 'patterns', 'noise', 'raymarching'] as const;
+export type Track = (typeof TRACKS)[number];
+
+/** Credit for an adapted shader. A challenge can list several (forks, embedded code). */
+export interface ChallengeSource {
+  title: string;
+  author: string;
+  url: string;
+  license: string;
+}
+
 export interface Challenge {
   id: string;
   slug: string;
   title: string;
   description: string;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
+  track: Track;
   referenceShaderSrc: string;
   tolerance: number;
   useBlur: boolean;
   hintText?: string;
+  source?: ChallengeSource[];
 }
 
 export interface JudgeResult {

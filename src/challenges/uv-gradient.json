@@ -4,6 +4,7 @@
   "title": "Cyan Horizon",
   "description": "Create a linear horizontal gradient that transitions from black on the left to cyan on the right. Cyan is a mix of maximum green and maximum blue.",
   "difficulty": "beginner",
+  "track": "color",
   "tolerance": 54.9,
   "useBlur": true,
   "hintText": "You need to calculate the UV coordinates by dividing gl_FragCoord.xy by u_resolution.xy. The x-coordinate of your UV will determine the color intensity."

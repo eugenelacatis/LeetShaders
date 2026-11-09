@@ -150,6 +150,7 @@ async function main(): Promise<void> {
             title: meta.title,
             description: meta.description,
             difficulty: meta.difficulty,
+            track: meta.track,
             tolerance: meta.tolerance,
             useBlur: meta.useBlur,
           },

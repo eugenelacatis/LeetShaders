@@ -4,6 +4,7 @@
   "title": "Orbital Geometry",
   "description": "Implement a basic raymarching engine to render a 3D-shaded sphere. The sphere should have diffuse lighting and a specular highlight.",
   "difficulty": "advanced",
+  "track": "raymarching",
   "tolerance": 5.7,
   "useBlur": true
 }

@@ -66,6 +66,7 @@ const BORDERLINE_CHALLENGE: Challenge = {
   title: 'Integration',
   description: '',
   difficulty: 'beginner',
+  track: 'shapes',
   referenceShaderSrc: 'ref',
   tolerance: 10,
   useBlur: false,

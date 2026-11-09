@@ -51,10 +51,12 @@ function toChallenge(meta: Record<string, unknown>, glsl: string): Challenge {
     title: meta.title as string,
     description: meta.description as string,
     difficulty: meta.difficulty as Challenge['difficulty'],
+    track: meta.track as Challenge['track'],
     referenceShaderSrc: glsl,
     tolerance: meta.tolerance as number,
     useBlur: meta.useBlur as boolean,
     hintText: (meta.hintText as string) ?? undefined,
+    source: (meta.source as Challenge['source']) ?? undefined,
   };
 }
 

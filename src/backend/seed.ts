@@ -53,10 +53,12 @@ async function seed() {
           title: metadata.title,
           description: metadata.description,
           difficulty: metadata.difficulty,
+          track: metadata.track,
           reference_shader_src: shaderSrc,
           tolerance: metadata.tolerance,
           use_blur: metadata.useBlur,
           hint_text: metadata.hintText,
+          source: metadata.source ?? null,
         }, {
           onConflict: 'slug'
         });
