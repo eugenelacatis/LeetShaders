@@ -8,6 +8,8 @@ import { computeMAEResult } from '../judge/mae';
 import type { Challenge } from '../judge/types';
 import { useColors } from '../hooks/useColors';
 import { tokens } from '../tokens';
+import HowItWorks from '../components/HowItWorks';
+import { nearMiss } from '../components/demoShaders';
 
 const t = tokens.color;
 const HEADLINE = 'Match the reference.';
@@ -28,14 +30,6 @@ const THUMB: Record<string, string> = {
   'raymarched-sphere':
     'radial-gradient(circle at 40% 36%, #fff 0 3%, #c9d6ff 9%, #4a68d8 30%, #0d1436 46.5%, #05060c 47.5%)',
 };
-
-// A near miss of the reference: the light sits a little lower and the highlight is softer.
-function nearMiss(src: string): string {
-  return src
-    .replace('vec3(2.0, 4.0, 5.0)', 'vec3(4.0, 2.5, 4.0)')
-    .replace('vec3(0.4, 0.6, 0.9)', 'vec3(0.5, 0.55, 0.95)')
-    .replace('32.0', '16.0');
-}
 
 function useDemoScore(challenge: Challenge | undefined, yoursSrc: string): number | null {
   const [mae, setMae] = useState<number | null>(null);
@@ -346,7 +340,13 @@ export default function Landing() {
                 color: colors.textPrimary,
               }}
             >
-              {mae !== null && sphere ? `${mae.toFixed(1)} of ${sphere.tolerance} allowed` : ' '}
+              {within === null
+                ? ' '
+                : !within
+                  ? 'Over the limit'
+                  : fill < 60
+                    ? 'Well within the limit'
+                    : 'Within the limit'}
             </Typography>
           </Box>
         </Box>
@@ -405,6 +405,8 @@ export default function Landing() {
           </Box>
         ))}
       </Box>
+
+      {sphere && <HowItWorks refSrc={sphere.referenceShaderSrc} yoursSrc={yoursSrc} />}
     </Box>
   );
 }
