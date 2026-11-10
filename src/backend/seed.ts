@@ -34,6 +34,7 @@ async function seed() {
       const slug = jsonFile.replace('.json', '');
       const jsonPath = path.join(CHALLENGES_DIR, jsonFile);
       const glslPath = path.join(CHALLENGES_DIR, `${slug}.glsl`);
+      const starterPath = path.join(CHALLENGES_DIR, `${slug}.starter.glsl`);
 
       if (!fs.existsSync(glslPath)) {
         console.warn(`Warning: No matching .glsl file found for ${slug}. Skipping.`);
@@ -42,6 +43,7 @@ async function seed() {
 
       const metadata = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
       const shaderSrc = fs.readFileSync(glslPath, 'utf-8');
+      const starterSrc = fs.existsSync(starterPath) ? fs.readFileSync(starterPath, 'utf-8') : null;
 
       console.log(`Seeding challenge: ${metadata.title} (${slug})...`);
 
@@ -55,6 +57,7 @@ async function seed() {
           difficulty: metadata.difficulty,
           track: metadata.track,
           reference_shader_src: shaderSrc,
+          starter_src: starterSrc,
           tolerance: metadata.tolerance,
           use_blur: metadata.useBlur,
           hint_text: metadata.hintText,

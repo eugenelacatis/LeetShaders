@@ -3,7 +3,7 @@ import { Box, Typography, keyframes } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { useChallenges } from '../backend/useChallenges';
 import { ShaderCanvas } from '../components/ShaderCanvas';
-import { PATH_ORDER } from '../challenges/path';
+import { RANK, byPath } from '../challenges/path';
 import { TRACKS } from '../judge/types';
 import type { Challenge, Track } from '../judge/types';
 import { tokens } from '../tokens';
@@ -16,7 +16,6 @@ const ledPulse = keyframes`50% { opacity: 0.7; box-shadow: none; }`;
 
 type Difficulty = Challenge['difficulty'];
 
-const RANK: Record<Difficulty, number> = { beginner: 1, intermediate: 2, advanced: 3, expert: 4 };
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
   beginner: 'Easy',
   intermediate: 'Medium',
@@ -73,20 +72,6 @@ function getSolvedSet(): Set<string> {
     // localStorage can throw (private mode, blocked storage); show nothing as solved.
   }
   return solved;
-}
-
-// Listed slugs follow PATH_ORDER; unlisted ones go after them, easiest first.
-function pathIndex(c: Challenge): number {
-  const i = PATH_ORDER.indexOf(c.slug);
-  return i === -1 ? PATH_ORDER.length : i;
-}
-
-function byPath(a: Challenge, b: Challenge): number {
-  return (
-    pathIndex(a) - pathIndex(b) ||
-    RANK[a.difficulty] - RANK[b.difficulty] ||
-    a.title.localeCompare(b.title)
-  );
 }
 
 function ProgressBar({ value, height = 10 }: { value: number; height?: number }) {

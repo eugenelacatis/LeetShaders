@@ -1,35 +1,25 @@
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Collapse,
-  Snackbar,
-  Typography,
-} from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
+import { Alert, Box, CircularProgress, Snackbar, Typography } from '@mui/material';
+import { keyframes } from '@mui/material/styles';
 import { Link, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Monaco from '../editor/Monaco';
-import LivePreview from '../editor/LivePreview';
+import RenderStage from '../editor/RenderStage';
+import type { Lens } from '../editor/RenderStage';
+import CapstoneCells from '../editor/CapstoneCells';
 import ErrorConsole from '../editor/ErrorConsole';
 import ResultPanel from '../editor/ResultPanel';
-import type { ResultData } from '../editor/ResultPanel';
-import { useChallenge, submitSolve } from '../backend/useChallenges';
+import type { Verdict } from '../editor/ResultPanel';
+import { describeDifference } from '../editor/diffReason';
+import { useChallenge, useChallenges, submitSolve } from '../backend/useChallenges';
+import { nextOnPath } from '../challenges/path';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { judge } from '../judge/combiner';
 import { llmJudge, llmCheatCheck } from '../judge/llm';
 import { computeMAEResult } from '../judge/mae';
-import { compileAndRender } from '../judge/pipeline';
+import { compileAndRender, CANVAS_SIZE } from '../judge/pipeline';
 import { sampleUniforms, freshSeed } from '../judge/uniforms';
 import { DEFAULT_BANDS } from '../ai/bandLogic';
-import { useColors } from '../hooks/useColors';
-import type { ColorPalette } from '../theme';
-import type { PipelineError } from '../judge/types';
+import type { Challenge, PipelineError } from '../judge/types';
 import { tokens } from '../tokens';
 
 const STARTER = `#version 300 es
@@ -48,22 +38,62 @@ void main() {
 `;
 
 const DEBOUNCE_MS = 300;
-const MIN_LEFT = 240;
-const MIN_RIGHT = 240;
-const MIN_CENTER = 300;
+const NAV_HEIGHT = 60;
+// The backdrop is blurred heavily, so a tiny copy of the render is enough.
+const BACKDROP_SIZE = 64;
 
-const DIFFICULTY_LABEL: Record<string, string> = {
+const t = tokens.color;
+const NARROW = '@media (max-width: 859.95px)';
+const PRESS = `${tokens.motion.press} ${tokens.motion.pressEasing}`;
+const SHEET_W = 'min(46%, 560px)';
+
+// Derived shades. Each one mixes locked tokens, so no new raw colors enter the page.
+const GLASS = `color-mix(in srgb, ${t.ground} 84%, transparent)`;
+const GLASS_EDGE = `color-mix(in srgb, ${t.text} 16%, transparent)`;
+const GLASS_RULE = `color-mix(in srgb, ${t.text} 10%, transparent)`;
+const GHOST_EDGE = `color-mix(in srgb, ${t.text} 25%, transparent)`;
+const FLOAT_SHADOW = `0 30px 60px color-mix(in srgb, ${t.edge} 70%, transparent)`;
+const LENS_BEZEL = `color-mix(in srgb, ${t.edge} 70%, transparent)`;
+const LENS_KEY = `color-mix(in srgb, ${t.surfaceRaised} 85%, transparent)`;
+
+type Difficulty = Challenge['difficulty'];
+
+const DIFFICULTY_LABEL: Record<Difficulty, string> = {
   beginner: 'Easy',
   intermediate: 'Medium',
   advanced: 'Hard',
   expert: 'Expert',
 };
 
-function getDifficultyColor(d: string, c: ColorPalette): string {
-  if (d === 'beginner') return c.success;
-  if (d === 'intermediate') return c.warning;
-  return c.danger;
+const DIFFICULTY_COLOR: Record<Difficulty, string> = {
+  beginner: t.pass,
+  intermediate: t.blueUi,
+  advanced: `color-mix(in srgb, ${t.red} 60%, ${t.text})`,
+  expert: t.gold,
+};
+
+const scan = keyframes`
+  from { background-position: 0 120%; }
+  to { background-position: 0 -100%; }
+`;
+
+// When this frame matches but the submission still failed: another input, or how it was drawn.
+const SAME_FRAME_REASON =
+  'This frame looks right, but your shader differs somewhere else the judge looked. Check anything that changes with time or the mouse.';
+
+// Where your render differs from the reference at the default inputs, in words.
+function differenceReason(src: string, referenceSrc: string): string | null {
+  const yours = compileAndRender(src);
+  const ref = compileAndRender(referenceSrc);
+  if ('type' in yours || 'type' in ref) return null;
+  return describeDifference(yours.pixels, ref.pixels, CANVAS_SIZE);
 }
+
+const LENSES: { key: Lens; label: string }[] = [
+  { key: 'yours', label: 'Yours' },
+  { key: 'reference', label: 'Reference' },
+  { key: 'difference', label: 'Difference' },
+];
 
 interface SubmissionRecord {
   timestamp: number;
@@ -75,7 +105,9 @@ function getSubmissionHistory(challengeId: string): SubmissionRecord[] {
   try {
     const raw = localStorage.getItem(`ls_history_${challengeId}`);
     return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 function saveSubmission(challengeId: string, record: SubmissionRecord) {
@@ -84,98 +116,72 @@ function saveSubmission(challengeId: string, record: SubmissionRecord) {
   localStorage.setItem(`ls_history_${challengeId}`, JSON.stringify(history.slice(0, 50)));
 }
 
-function Section({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
-  const colors = useColors();
-  const [open, setOpen] = useState(defaultOpen);
+function isTyping(target: EventTarget | null): boolean {
   return (
-    <Box sx={{ mb: 1 }}>
-      <Box
-        onClick={() => setOpen((v) => !v)}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          cursor: 'pointer',
-          py: 0.75,
-          '&:hover': { '& .section-label': { color: colors.textSecondary } },
-        }}
-      >
-        {open
-          ? <ExpandLessIcon sx={{ fontSize: 14, color: colors.textTertiary, mr: 0.5 }} />
-          : <ExpandMoreIcon sx={{ fontSize: 14, color: colors.textTertiary, mr: 0.5 }} />
-        }
-        <Typography className="section-label" sx={{ fontSize: '0.68rem', color: colors.textTertiary, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', transition: 'color 0.1s' }}>
-          {title}
-        </Typography>
-      </Box>
-      <Collapse in={open}>
-        <Box sx={{ pl: 2.5, pb: 1.5 }}>{children}</Box>
-      </Collapse>
-    </Box>
+    target instanceof Element &&
+    target.closest('input, textarea, [contenteditable="true"], .monaco-editor') !== null
   );
 }
 
-function DragHandle({ onDrag }: { onDrag: (dx: number) => void }) {
-  const colors = useColors();
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const onMove = (ev: MouseEvent) => onDrag(ev.clientX - startX);
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }, [onDrag]);
+const btnBase = {
+  minHeight: tokens.minTapTarget,
+  px: '18px',
+  borderRadius: tokens.radius.md,
+  border: `${tokens.border} solid transparent`,
+  fontFamily: tokens.font.sans,
+  fontWeight: 800,
+  fontSize: tokens.type.label.size,
+  color: t.text,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  transition: `transform ${PRESS}, box-shadow ${PRESS}`,
+  '&:active:not(:disabled)': { transform: 'translate(2px, 2px)' },
+  '&:disabled': { opacity: 0.45, cursor: 'not-allowed' },
+  '&:focus-visible': { outline: `2px solid ${t.blueUi}`, outlineOffset: '2px' },
+} as const;
 
-  return (
-    <Box
-      onMouseDown={handleMouseDown}
-      sx={{
-        width: 5,
-        flexShrink: 0,
-        cursor: 'col-resize',
-        backgroundColor: colors.border,
-        transition: 'background-color 0.15s',
-        '&:hover': { backgroundColor: colors.accent },
-      }}
-    />
-  );
-}
+const ghostBtn = { ...btnBase, backgroundColor: 'transparent', borderColor: GHOST_EDGE };
+const goBtn = {
+  ...btnBase,
+  backgroundColor: t.redUi,
+  boxShadow: `0 0 0 1px color-mix(in srgb, ${t.edge} 30%, transparent), 0 8px 24px color-mix(in srgb, ${t.red} 40%, transparent)`,
+};
 
 export default function ChallengePage() {
-  const colors = useColors();
   const { slug = '' } = useParams();
   const { data: challenge, loading } = useChallenge(slug);
+  const { data: allChallenges } = useChallenges();
+  const reducedMotion = useReducedMotion();
   const [src, setSrc] = useState(STARTER);
   const [debouncedSrc, setDebouncedSrc] = useState(STARTER);
   const [errors, setErrors] = useState<PipelineError[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitStage, setSubmitStage] = useState('');
-  const [resultData, setResultData] = useState<ResultData | null>(null);
+  const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [runNote, setRunNote] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
-  const [history, setHistory] = useState<SubmissionRecord[]>([]);
   const [solveSaveError, setSolveSaveError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'description' | 'solution' | 'submissions'>('description');
-
-  const [leftWidth, setLeftWidth] = useState(360);
-  const [rightWidth, setRightWidth] = useState(380);
-  const leftBase = useRef(360);
-  const rightBase = useRef(380);
+  const [lens, setLens] = useState<Lens>('yours');
+  const [holdingR, setHoldingR] = useState(false);
+  const [hintOpen, setHintOpen] = useState(false);
 
   const jumpToLineRef = useRef<((line: number) => void) | null>(null);
   const timeRef = useRef(0);
+  const backdropRef = useRef<HTMLCanvasElement | null>(null);
 
   const referenceSrc = useMemo(() => challenge?.referenceShaderSrc ?? '', [challenge]);
   const hasCompileError = errors.some((e) => e.kind === 'compile-error');
+  const shownLens: Lens = holdingR ? 'reference' : lens;
 
+  // Each challenge starts from its own starter, or the shared one.
+  const starter = challenge ? (challenge.starterSrc ?? STARTER) : null;
   useEffect(() => {
-    if (challenge) setHistory(getSubmissionHistory(challenge.id));
-  }, [challenge]);
+    if (starter === null) return;
+    setSrc(starter);
+    setDebouncedSrc(starter);
+    setVerdict(null);
+    setRunNote(null);
+  }, [starter]);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSrc(src), DEBOUNCE_MS);
@@ -193,44 +199,78 @@ export default function ChallengePage() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const handleLeftDrag = useCallback((dx: number) => {
-    const total = window.innerWidth;
-    const newLeft = Math.max(MIN_LEFT, Math.min(leftBase.current + dx, total - rightWidth - MIN_CENTER));
-    setLeftWidth(newLeft);
-  }, [rightWidth]);
-
-  const handleRightDrag = useCallback((dx: number) => {
-    const total = window.innerWidth;
-    const newRight = Math.max(MIN_RIGHT, Math.min(rightBase.current - dx, total - leftWidth - MIN_CENTER));
-    setRightWidth(newRight);
-  }, [leftWidth]);
-
+  // Hold R to flip to the reference, unless the key is going into the editor.
   useEffect(() => {
-    const onUp = () => {
-      leftBase.current = leftWidth;
-      rightBase.current = rightWidth;
+    const down = (e: KeyboardEvent): void => {
+      if (e.key.toLowerCase() !== 'r' || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTyping(e.target)) return;
+      setHoldingR(true);
     };
-    document.addEventListener('mouseup', onUp);
-    return () => document.removeEventListener('mouseup', onUp);
-  }, [leftWidth, rightWidth]);
+    const up = (e: KeyboardEvent): void => {
+      if (e.key.toLowerCase() === 'r') setHoldingR(false);
+    };
+    const reset = (): void => setHoldingR(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', reset);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', reset);
+    };
+  }, []);
 
   const handleUserErrors = useCallback((errs: PipelineError[]) => {
     setErrors(errs);
   }, []);
 
+  // A verdict or quick check belongs to the code it judged; editing clears it.
+  const handleEdit = useCallback((value: string) => {
+    setSrc(value);
+    setVerdict(null);
+    setRunNote(null);
+  }, []);
+
+  const dismissVerdict = useCallback(() => setVerdict(null), []);
+  const backToRender = useCallback(() => {
+    setVerdict(null);
+    setLens('yours');
+  }, []);
+
   const handleRun = useCallback(() => {
     if (!challenge || hasCompileError) return;
     setRunning(true);
-    setResultData(null);
+    setRunNote(null);
+    setVerdict(null);
 
     setTimeout(() => {
       const userResult = compileAndRender(src);
-      if ('type' in userResult) { setRunning(false); return; }
+      if ('type' in userResult) {
+        setRunning(false);
+        return;
+      }
       const refResult = compileAndRender(challenge.referenceShaderSrc);
-      if ('type' in refResult) { setRunning(false); return; }
+      if ('type' in refResult) {
+        setRunning(false);
+        return;
+      }
 
-      const mae = computeMAEResult(userResult.pixels, refResult.pixels, challenge.tolerance, challenge.useBlur);
-      setResultData({ kind: 'run', mae: mae.rawMae, score: Math.round(mae.score) });
+      const mae = computeMAEResult(
+        userResult.pixels,
+        refResult.pixels,
+        challenge.tolerance,
+        challenge.useBlur,
+      );
+      if (mae.score >= DEFAULT_BANDS.upperBand) {
+        setRunNote('Quick check: looks like a match. Submit for the full judge.');
+      } else {
+        const reason = describeDifference(userResult.pixels, refResult.pixels, CANVAS_SIZE);
+        setRunNote(
+          reason
+            ? `Quick check: not yet. ${reason}`
+            : 'Quick check: close, but not quite. Look closely at the edges and colors.',
+        );
+      }
       setDebouncedSrc(src);
       setRunning(false);
     }, 50);
@@ -239,23 +279,43 @@ export default function ChallengePage() {
   const handleSubmit = useCallback(async () => {
     if (!challenge || submitting) return;
     setSubmitting(true);
-    setResultData(null);
-    setSubmitStage('Running pixel comparison...');
+    setVerdict(null);
+    setRunNote(null);
+    setLens('yours');
+    setSubmitStage('Comparing pixels at several inputs.');
 
     try {
-      const judgeResult = await judge(src, challenge, async (input) => {
-        setSubmitStage('Running AI visual analysis...');
-        return llmJudge(input);
-      }, DEFAULT_BANDS, sampleUniforms(freshSeed()), llmCheatCheck);
-      setResultData({ kind: 'submit', result: judgeResult });
+      const judgeResult = await judge(
+        src,
+        challenge,
+        async (input) => {
+          setSubmitStage('Still checking. This can take a few seconds.');
+          return llmJudge(input);
+        },
+        DEFAULT_BANDS,
+        sampleUniforms(freshSeed()),
+        llmCheatCheck,
+      );
+      // A close call the vision model didn't answer isn't a fail: keep it out of history.
+      const notJudged = !judgeResult.passed && judgeResult.breakdown.llmUnavailable === true;
+      if (judgeResult.passed) {
+        const next = allChallenges ? nextOnPath(allChallenges, challenge) : null;
+        setVerdict({ kind: 'matched', next: next && { slug: next.slug, title: next.title } });
+      } else if (notJudged) {
+        setVerdict({ kind: 'not-judged' });
+      } else {
+        const reason = differenceReason(src, challenge.referenceShaderSrc) ?? SAME_FRAME_REASON;
+        setVerdict({ kind: 'not-yet', reason });
+        setLens('difference');
+      }
 
-      const record: SubmissionRecord = {
-        timestamp: Date.now(),
-        score: judgeResult.finalScore,
-        passed: judgeResult.passed,
-      };
-      saveSubmission(challenge.id, record);
-      setHistory(getSubmissionHistory(challenge.id));
+      if (!notJudged) {
+        saveSubmission(challenge.id, {
+          timestamp: Date.now(),
+          score: judgeResult.finalScore,
+          passed: judgeResult.passed,
+        });
+      }
 
       if (judgeResult.passed) {
         try {
@@ -269,21 +329,30 @@ export default function ChallengePage() {
         }
       }
     } catch (err) {
-      setResultData(null);
-      setErrors([{
-        kind: 'context-lost',
-        message: err instanceof Error ? err.message : 'Submission failed',
-      }]);
+      setVerdict(null);
+      setErrors([
+        {
+          kind: 'context-lost',
+          message: err instanceof Error ? err.message : 'Submission failed',
+        },
+      ]);
     } finally {
       setSubmitting(false);
       setSubmitStage('');
     }
-  }, [challenge, src, submitting]);
+  }, [challenge, src, submitting, allChallenges]);
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 60px)' }}>
-        <CircularProgress size={20} sx={{ color: colors.accent }} />
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: `calc(100dvh - ${NAV_HEIGHT}px)`,
+        }}
+      >
+        <CircularProgress size={20} sx={{ color: t.blueUi }} />
       </Box>
     );
   }
@@ -291,211 +360,383 @@ export default function ChallengePage() {
   if (!challenge) {
     return (
       <Box sx={{ px: 4, py: 6 }}>
-        <Typography sx={{ color: colors.textSecondary, mb: 2 }}>Challenge not found.</Typography>
-        <Button component={Link} to="/challenges" startIcon={<ArrowBackIcon />} size="small">Back</Button>
+        <Typography sx={{ color: t.textSoft, mb: 2 }}>Challenge not found.</Typography>
+        <Box
+          component={Link}
+          to="/challenges"
+          sx={{ ...ghostBtn, display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}
+        >
+          Back to challenges
+        </Box>
       </Box>
     );
   }
 
-  const tabs = ['description', 'solution', 'submissions'] as const;
+  let status = 'Hold R to flip. Click a pixel to compare. Option-drag a number to scrub.';
+  if (submitting) status = submitStage;
+  else if (running) status = 'Running a quick check.';
+  else if (hasCompileError) status = 'Paused on your last working render.';
+  else if (runNote) status = runNote;
+  else if (shownLens === 'difference') status = 'Difference view. Bright means different.';
+  else if (shownLens === 'reference') status = 'Showing the reference.';
+
+  const busy = running || submitting;
+  // The phone hides the status line unless it carries news.
+  const statusOnPhone = submitting || running || runNote !== null;
 
   return (
-    <Box sx={{ height: 'calc(100vh - 60px)', display: 'flex', overflow: 'hidden' }}>
-
-      {/* Left */}
-      <Box sx={{ width: leftWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${colors.border}` }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-            <Button component={Link} to="/challenges" size="small" sx={{ minWidth: 0, p: 0.25, color: colors.textTertiary, '&:hover': { color: colors.textPrimary } }}>
-              <ArrowBackIcon sx={{ fontSize: 14 }} />
-            </Button>
-            <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: colors.textPrimary, fontFamily: tokens.font.sans }}>
-              {challenge.title}
-            </Typography>
-          </Box>
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 500, color: getDifficultyColor(challenge.difficulty, colors), pl: 3.5 }}>
-            {DIFFICULTY_LABEL[challenge.difficulty]}
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: 'flex', borderBottom: `1px solid ${colors.border}` }}>
-          {tabs.map((tab) => (
-            <Box
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              sx={{
-                flex: 1, py: 0.75, textAlign: 'center', cursor: 'pointer',
-                fontSize: '0.72rem', fontWeight: 500,
-                color: activeTab === tab ? colors.textPrimary : colors.textTertiary,
-                borderBottom: activeTab === tab ? `2px solid ${colors.accent}` : '2px solid transparent',
-                transition: 'color 0.1s',
-                '&:hover': { color: colors.textSecondary },
-                textTransform: 'capitalize',
-              }}
-            >
-              {tab === 'submissions' ? `Submissions (${history.length})` : tab}
-            </Box>
-          ))}
-        </Box>
-
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
-          {activeTab === 'description' && (
-            <Box sx={{ px: 1.5, py: 1 }}>
-              <Section title="Description">
-                <Typography sx={{ fontSize: '0.8rem', color: colors.textSecondary, lineHeight: 1.7 }}>
-                  {challenge.description}
-                </Typography>
-              </Section>
-
-              {challenge.hintText && (
-                <Section title="Hint" defaultOpen={false}>
-                  <Typography sx={{ fontSize: '0.78rem', color: colors.textSecondary, lineHeight: 1.6 }}>
-                    {challenge.hintText}
-                  </Typography>
-                </Section>
-              )}
-
-              <Section title="Uniforms">
-                <Box component="ul" sx={{ m: 0, pl: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                  {[
-                    { name: 'u_time', type: 'float', desc: 'Elapsed seconds' },
-                    { name: 'u_resolution', type: 'vec2', desc: 'Canvas size (px)' },
-                    { name: 'u_mouse', type: 'vec2', desc: 'Mouse position (px)' },
-                  ].map((u) => (
-                    <Box component="li" key={u.name} sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                      <Typography sx={{ fontSize: '0.72rem', fontFamily: tokens.font.mono, color: colors.accent, fontWeight: 500 }}>{u.name}</Typography>
-                      <Typography sx={{ fontSize: '0.62rem', color: colors.textTertiary }}>{u.type}</Typography>
-                      <Typography sx={{ fontSize: '0.62rem', color: colors.textSecondary, ml: 'auto' }}>{u.desc}</Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </Section>
-            </Box>
-          )}
-
-          {activeTab === 'solution' && (
-            <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <Box sx={{ flex: 1, minHeight: 0 }}>
-                <Monaco value={referenceSrc} onChange={() => {}} readOnly errors={[]} />
-              </Box>
-            </Box>
-          )}
-
-          {activeTab === 'submissions' && (
-            <Box sx={{ px: 1.5, py: 1 }}>
-              {history.length === 0 ? (
-                <Typography sx={{ fontSize: '0.78rem', color: colors.textTertiary, py: 2 }}>
-                  No submissions yet.
-                </Typography>
-              ) : (
-                history.map((h, i) => (
-                  <Box
-                    key={i}
-                    sx={{
-                      display: 'flex', alignItems: 'center', gap: 1.5,
-                      py: 1, borderBottom: `1px solid ${colors.border}`,
-                    }}
-                  >
-                    {h.passed
-                      ? <CheckCircleOutlineIcon sx={{ fontSize: 13, color: colors.success }} />
-                      : <CancelOutlinedIcon sx={{ fontSize: 13, color: colors.danger }} />
-                    }
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: h.passed ? colors.success : colors.danger }}>
-                      {h.passed ? 'Accepted' : 'Failed'}
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.72rem', color: colors.textPrimary }}>
-                      {h.score}
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.62rem', color: colors.textTertiary, ml: 'auto' }}>
-                      {new Date(h.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </Typography>
-                  </Box>
-                ))
-              )}
-            </Box>
-          )}
-        </Box>
+    <Box
+      sx={{
+        position: 'relative',
+        height: `calc(100dvh - ${NAV_HEIGHT}px)`,
+        overflow: 'hidden',
+        backgroundColor: t.previewBg,
+        fontFamily: tokens.font.sans,
+        color: t.text,
+      }}
+    >
+      {/* Blurred, dimmed copy of your render behind the glass */}
+      <Box sx={{ position: 'absolute', inset: '-60px', pointerEvents: 'none' }} aria-hidden="true">
+        <canvas
+          ref={backdropRef}
+          width={BACKDROP_SIZE}
+          height={BACKDROP_SIZE}
+          style={{
+            display: 'block',
+            width: '100%',
+            height: '100%',
+            filter: 'blur(48px) brightness(0.32) saturate(1.3)',
+          }}
+        />
       </Box>
 
-      <DragHandle onDrag={handleLeftDrag} />
-
-      {/* Center */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-        <Box sx={{ flex: 1, overflow: 'hidden' }}>
-          <Monaco value={src} onChange={setSrc} errors={errors} onJumpToLine={jumpToLineRef} />
+      {/* Render, lens keys, status line */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: '20px',
+          bottom: '20px',
+          right: '20px',
+          left: `calc(${SHEET_W} + 40px)`,
+          display: 'grid',
+          gridTemplateRows: 'minmax(0, 1fr) auto auto',
+          justifyItems: 'center',
+          gap: tokens.space[3],
+          [NARROW]: {
+            left: '12px',
+            right: '12px',
+            top: '12px',
+            bottom: '54%',
+            gap: tokens.space[2],
+          },
+        }}
+      >
+        <Box
+          sx={{
+            width: '100%',
+            height: '100%',
+            containerType: 'size',
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+          <Box
+            sx={{
+              position: 'relative',
+              width: 'min(100cqw, 100cqh)',
+              height: 'min(100cqw, 100cqh)',
+              borderRadius: '18px',
+              overflow: 'clip',
+              boxShadow: `0 0 0 1px ${GLASS_EDGE}, ${FLOAT_SHADOW}`,
+            }}
+          >
+            <RenderStage
+              userSrc={debouncedSrc}
+              referenceSrc={referenceSrc}
+              lens={shownLens}
+              showThumb={shownLens === 'yours' && !submitting}
+              timeRef={timeRef}
+              onErrors={handleUserErrors}
+              backdropRef={backdropRef}
+            />
+            {submitting && !reducedMotion && (
+              <Box
+                aria-hidden="true"
+                sx={{
+                  position: 'absolute',
+                  inset: 0,
+                  pointerEvents: 'none',
+                  background: `linear-gradient(180deg, transparent 0, transparent 40%, color-mix(in srgb, ${t.blueUi} 35%, transparent) 50%, transparent 52%)`,
+                  backgroundSize: '100% 220%',
+                  mixBlendMode: 'screen',
+                  animation: `${scan} 1.8s linear infinite`,
+                }}
+              />
+            )}
+            {verdict && !busy && (
+              <ResultPanel
+                verdict={verdict}
+                reducedMotion={reducedMotion}
+                onDismiss={dismissVerdict}
+                onBackToRender={backToRender}
+                onSubmitAgain={handleSubmit}
+              />
+            )}
+          </Box>
         </Box>
 
-        <ErrorConsole errors={errors} onJumpToLine={(line) => jumpToLineRef.current?.(line)} />
-
-        {(resultData || running || submitting) && (
-          <Box sx={{ borderTop: `1px solid ${colors.border}`, backgroundColor: colors.surface, px: 2, py: 1.5, maxHeight: 200, overflow: 'auto' }}>
-            {(running || submitting) ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CircularProgress size={12} sx={{ color: colors.accent }} />
-                <Typography sx={{ fontSize: '0.75rem', color: colors.textSecondary }}>
-                  {submitting ? submitStage : 'Running test...'}
-                </Typography>
+        <Box
+          role="group"
+          aria-label="Lens"
+          sx={{
+            width: 'min(100%, 420px)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '6px',
+            p: '6px',
+            borderRadius: '12px',
+            backgroundColor: LENS_BEZEL,
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+          }}
+        >
+          {LENSES.map((l) => {
+            const on = shownLens === l.key;
+            return (
+              <Box
+                key={l.key}
+                component="button"
+                type="button"
+                aria-pressed={on}
+                onClick={() => setLens(l.key)}
+                sx={{
+                  minHeight: tokens.minTapTarget,
+                  border: 0,
+                  borderRadius: '8px',
+                  backgroundColor: on ? t.text : LENS_KEY,
+                  color: on ? t.ground : t.text,
+                  fontFamily: tokens.font.sans,
+                  fontWeight: 700,
+                  fontSize: tokens.type.label.size,
+                  cursor: 'pointer',
+                  '&:focus-visible': { outline: `2px solid ${t.blueUi}`, outlineOffset: '2px' },
+                  [NARROW]: { minHeight: '40px', fontSize: '14px' },
+                }}
+              >
+                {l.label}
               </Box>
-            ) : resultData && (
-              <ResultPanel data={resultData} />
-            )}
+            );
+          })}
+        </Box>
+
+        <Typography
+          aria-live="polite"
+          sx={{
+            fontSize: tokens.type.label.size,
+            fontWeight: 600,
+            color: t.textSoft,
+            textAlign: 'center',
+            minHeight: '22px',
+            maxWidth: '60ch',
+            [NARROW]: statusOnPhone
+              ? { fontSize: tokens.type.small.size, minHeight: 0 }
+              : { display: 'none' },
+          }}
+        >
+          {status}
+        </Typography>
+      </Box>
+
+      {/* Glass code sheet */}
+      <Box
+        component="section"
+        aria-label="Challenge and code"
+        sx={{
+          position: 'absolute',
+          left: '20px',
+          top: '20px',
+          bottom: '20px',
+          width: SHEET_W,
+          display: 'flex',
+          flexDirection: 'column',
+          borderRadius: '18px',
+          overflow: 'clip',
+          backgroundColor: GLASS,
+          backdropFilter: 'blur(18px) saturate(1.2)',
+          WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
+          border: `1px solid ${GLASS_EDGE}`,
+          boxShadow: FLOAT_SHADOW,
+          [NARROW]: {
+            left: 0,
+            right: 0,
+            top: 'auto',
+            bottom: 0,
+            width: 'auto',
+            height: '52%',
+            borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+            borderBottom: 0,
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: '6px',
+              left: '50%',
+              width: '44px',
+              height: '5px',
+              ml: '-22px',
+              borderRadius: '3px',
+              backgroundColor: `color-mix(in srgb, ${t.text} 35%, transparent)`,
+            },
+          },
+        }}
+      >
+        <Box
+          sx={{
+            display: 'grid',
+            gap: '6px',
+            p: '16px 18px 12px',
+            borderBottom: `1px solid ${GLASS_RULE}`,
+            maxHeight: '35%',
+            overflow: 'auto',
+            flexShrink: 0,
+            [NARROW]: { pt: '18px', maxHeight: '30%' },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <Typography
+              component="h1"
+              sx={{
+                m: 0,
+                fontSize: tokens.type.h3.size,
+                fontWeight: tokens.type.h3.weight,
+                letterSpacing: tokens.type.h3.tracking,
+                lineHeight: tokens.type.h3.leading,
+              }}
+            >
+              {challenge.title}
+            </Typography>
+            <Box
+              component="span"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: tokens.type.small.size,
+                fontWeight: 700,
+                px: '10px',
+                py: '3px',
+                borderRadius: tokens.radius.sm,
+                color: DIFFICULTY_COLOR[challenge.difficulty],
+                backgroundColor: `color-mix(in srgb, ${DIFFICULTY_COLOR[challenge.difficulty]} 16%, transparent)`,
+                '&::before': {
+                  content: '""',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: 'currentColor',
+                },
+              }}
+            >
+              {DIFFICULTY_LABEL[challenge.difficulty]}
+            </Box>
+          </Box>
+          <Typography
+            sx={{
+              m: 0,
+              fontSize: tokens.type.label.size,
+              fontWeight: 400,
+              lineHeight: 1.5,
+              color: t.textSoft,
+            }}
+          >
+            {challenge.description}
+          </Typography>
+          {challenge.source && challenge.source.length > 0 && (
+            <Typography sx={{ m: 0, fontSize: tokens.type.small.size, color: t.textSoft }}>
+              Adapted from{' '}
+              {challenge.source.map((c, i) => (
+                <span key={c.url}>
+                  {i > 0 && ', '}
+                  <Box component="a" href={c.url} target="_blank" rel="noreferrer" sx={{ color: 'inherit' }}>
+                    {c.title}
+                  </Box>{' '}
+                  by {c.author} ({c.license})
+                </span>
+              ))}
+            </Typography>
+          )}
+          {hintOpen && challenge.hintText && (
+            <Typography
+              id="challenge-hint"
+              sx={{
+                m: 0,
+                mt: '4px',
+                p: '10px 12px',
+                borderRadius: tokens.radius.md,
+                fontSize: tokens.type.label.size,
+                fontWeight: 400,
+                lineHeight: 1.5,
+                color: t.text,
+                backgroundColor: `color-mix(in srgb, ${t.blueUi} 12%, transparent)`,
+              }}
+            >
+              {challenge.hintText}
+            </Typography>
+          )}
+        </Box>
+
+        {challenge.starterSrc ? (
+          <CapstoneCells src={src} onChange={handleEdit} errors={errors} onJumpToLine={jumpToLineRef} />
+        ) : (
+          <Box sx={{ flex: 1, minHeight: 0 }}>
+            <Monaco value={src} onChange={handleEdit} errors={errors} onJumpToLine={jumpToLineRef} />
           </Box>
         )}
 
+        <ErrorConsole errors={errors} onJumpToLine={(line) => jumpToLineRef.current?.(line)} />
+
         <Box
           sx={{
-            display: 'flex', alignItems: 'center', gap: 1,
-            px: 2, py: 0.75,
-            borderTop: `1px solid ${colors.border}`,
-            backgroundColor: colors.bg,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            p: '12px 16px',
+            borderTop: `1px solid ${GLASS_RULE}`,
+            flexShrink: 0,
           }}
         >
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<PlayArrowIcon sx={{ fontSize: 12 }} />}
+          <Box
+            component="button"
+            type="button"
             onClick={handleRun}
-            disabled={hasCompileError || running}
+            disabled={hasCompileError || busy}
+            sx={ghostBtn}
           >
             Run
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
+          </Box>
+          <Box
+            component="button"
+            type="button"
             onClick={handleSubmit}
-            disabled={submitting || hasCompileError}
+            disabled={hasCompileError || busy}
+            sx={goBtn}
           >
-            {submitting ? 'Judging...' : 'Submit'}
-          </Button>
-
-          <Typography sx={{ ml: 'auto', fontSize: '0.65rem', color: colors.textTertiary }}>
-            GLSL ES 3.0
-          </Typography>
+            {submitting ? 'Judging' : 'Submit'}
+          </Box>
+          {challenge.hintText && (
+            <Box
+              component="button"
+              type="button"
+              aria-expanded={hintOpen}
+              aria-controls="challenge-hint"
+              onClick={() => setHintOpen((v) => !v)}
+              sx={{ ...ghostBtn, ml: 'auto' }}
+            >
+              {hintOpen ? 'Hide hint' : 'Hint'}
+            </Box>
+          )}
         </Box>
       </Box>
 
-      <DragHandle onDrag={handleRightDrag} />
-
-      {/* Right */}
-      <Box sx={{ width: rightWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${colors.border}`, minHeight: 0 }}>
-          <Box sx={{ px: 1.5, py: 0.5, borderBottom: `1px solid ${colors.border}`, flexShrink: 0 }}>
-            <Typography sx={{ fontSize: '0.62rem', color: colors.textTertiary, fontWeight: 500 }}>YOUR OUTPUT</Typography>
-          </Box>
-          <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: '#000' }}>
-            <LivePreview shaderSrc={debouncedSrc} timeRef={timeRef} onErrors={handleUserErrors} />
-          </Box>
-        </Box>
-
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <Box sx={{ px: 1.5, py: 0.5, borderBottom: `1px solid ${colors.border}`, flexShrink: 0 }}>
-            <Typography sx={{ fontSize: '0.62rem', color: colors.textTertiary, fontWeight: 500 }}>REFERENCE</Typography>
-          </Box>
-          <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: '#000' }}>
-            <LivePreview shaderSrc={referenceSrc} timeRef={timeRef} />
-          </Box>
-        </Box>
-      </Box>
       <Snackbar
         open={solveSaveError !== null}
         autoHideDuration={8000}

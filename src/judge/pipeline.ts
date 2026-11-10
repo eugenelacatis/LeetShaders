@@ -103,7 +103,8 @@ export function getCanvas(): HTMLCanvasElement {
 function parseInfoLog(log: string): { line: number; message: string }[] {
   const results: { line: number; message: string }[] = [];
   for (const raw of log.split('\n')) {
-    const line = raw.trim();
+    // ANGLE ends the log with a NUL character.
+    const line = raw.replace(/\0/g, '').trim();
     if (!line) continue;
     const m = line.match(/(?:ERROR:\s*\d+:(\d+):|(\d+):(\d+):)\s*(.+)/);
     if (m) {

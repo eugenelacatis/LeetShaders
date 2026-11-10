@@ -24,6 +24,8 @@ export interface Challenge {
   /** Capstones only: the earlier tracks this challenge draws on. */
   mixes?: Track[];
   referenceShaderSrc: string;
+  /** Capstones: scene code with `@cell` regions to fill in. Others use the shared starter. */
+  starterSrc?: string;
   tolerance: number;
   useBlur: boolean;
   hintText?: string;

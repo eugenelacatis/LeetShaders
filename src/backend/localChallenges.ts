@@ -27,6 +27,13 @@ import polarPatternGlsl from '../challenges/polar-pattern.glsl?raw';
 import raymarchedSphereJson from '../challenges/raymarched-sphere.json';
 import raymarchedSphereGlsl from '../challenges/raymarched-sphere.glsl?raw';
 
+// Optional per-challenge starters: `<slug>.starter.glsl` next to the challenge files.
+const starters = import.meta.glob('../challenges/*.starter.glsl', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
 interface ChallengeFile {
   meta: Record<string, unknown>;
   glsl: string;
@@ -53,6 +60,7 @@ function toChallenge(meta: Record<string, unknown>, glsl: string): Challenge {
     difficulty: meta.difficulty as Challenge['difficulty'],
     track: meta.track as Challenge['track'],
     referenceShaderSrc: glsl,
+    starterSrc: starters[`../challenges/${meta.slug as string}.starter.glsl`],
     tolerance: meta.tolerance as number,
     useBlur: meta.useBlur as boolean,
     hintText: (meta.hintText as string) ?? undefined,
