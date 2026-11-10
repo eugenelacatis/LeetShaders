@@ -3,6 +3,7 @@ import { Box, Typography, keyframes } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { useChallenges } from '../backend/useChallenges';
 import { ShaderCanvas } from '../components/ShaderCanvas';
+import { PATH_ORDER } from '../challenges/path';
 import { TRACKS } from '../judge/types';
 import type { Challenge, Track } from '../judge/types';
 import { tokens } from '../tokens';
@@ -74,9 +75,18 @@ function getSolvedSet(): Set<string> {
   return solved;
 }
 
-// Easiest first; the expert boss key always lands last on its board.
+// Listed slugs follow PATH_ORDER; unlisted ones go after them, easiest first.
+function pathIndex(c: Challenge): number {
+  const i = PATH_ORDER.indexOf(c.slug);
+  return i === -1 ? PATH_ORDER.length : i;
+}
+
 function byPath(a: Challenge, b: Challenge): number {
-  return RANK[a.difficulty] - RANK[b.difficulty] || a.title.localeCompare(b.title);
+  return (
+    pathIndex(a) - pathIndex(b) ||
+    RANK[a.difficulty] - RANK[b.difficulty] ||
+    a.title.localeCompare(b.title)
+  );
 }
 
 function ProgressBar({ value, height = 10 }: { value: number; height?: number }) {
