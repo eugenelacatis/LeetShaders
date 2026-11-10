@@ -47,6 +47,7 @@ export function useChallenges(): UseChallengesResult {
         useBlur: r.use_blur as boolean,
         hintText: (r.hint_text as string) ?? undefined,
         source: (r.source as Challenge['source']) ?? undefined,
+        mixes: (r.mixes as Challenge['mixes']) ?? undefined,
       }));
 
       setData(challenges);
@@ -106,6 +107,7 @@ export function useChallenge(slug: string): UseChallengeResult {
         useBlur: row.use_blur as boolean,
         hintText: (row.hint_text as string) ?? undefined,
         source: (row.source as Challenge['source']) ?? undefined,
+        mixes: (row.mixes as Challenge['mixes']) ?? undefined,
       });
       setLoading(false);
     }

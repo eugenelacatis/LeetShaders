@@ -57,6 +57,7 @@ function toChallenge(meta: Record<string, unknown>, glsl: string): Challenge {
     useBlur: meta.useBlur as boolean,
     hintText: (meta.hintText as string) ?? undefined,
     source: (meta.source as Challenge['source']) ?? undefined,
+    mixes: (meta.mixes as Challenge['mixes']) ?? undefined,
   };
 }
 

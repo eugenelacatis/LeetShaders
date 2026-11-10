@@ -1,5 +1,8 @@
-/** Tracks in learning order. Each challenge belongs to exactly one. */
-export const TRACKS = ['color', 'shapes', 'combining', 'patterns', 'noise', 'raymarching'] as const;
+/**
+ * Tracks in learning order. Each challenge belongs to exactly one. `capstone` is
+ * the last board: each of its challenges mixes skills from two earlier tracks.
+ */
+export const TRACKS = ['color', 'shapes', 'combining', 'patterns', 'noise', 'raymarching', 'capstone'] as const;
 export type Track = (typeof TRACKS)[number];
 
 /** Credit for an adapted shader. A challenge can list several (forks, embedded code). */
@@ -15,8 +18,11 @@ export interface Challenge {
   slug: string;
   title: string;
   description: string;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  /** `expert` marks a track's boss key and every capstone. */
+  difficulty: 'beginner' | 'intermediate' | 'advanced' | 'expert';
   track: Track;
+  /** Capstones only: the earlier tracks this challenge draws on. */
+  mixes?: Track[];
   referenceShaderSrc: string;
   tolerance: number;
   useBlur: boolean;

@@ -59,6 +59,7 @@ async function seed() {
           use_blur: metadata.useBlur,
           hint_text: metadata.hintText,
           source: metadata.source ?? null,
+          mixes: metadata.mixes ?? null,
         }, {
           onConflict: 'slug'
         });

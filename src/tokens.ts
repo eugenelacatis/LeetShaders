@@ -19,6 +19,8 @@ export const tokens = {
     blue: '#006bb4',
     blueUi: '#5aaeea',
     pass: '#8fe3b0',
+    // Gold marks the hardest keys: each track's boss key and the capstone board.
+    gold: '#f2c14e',
     previewBg: '#05060c',
   },
   font: {

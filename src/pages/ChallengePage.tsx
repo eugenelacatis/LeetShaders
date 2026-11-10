@@ -56,6 +56,7 @@ const DIFFICULTY_LABEL: Record<string, string> = {
   beginner: 'Easy',
   intermediate: 'Medium',
   advanced: 'Hard',
+  expert: 'Expert',
 };
 
 function getDifficultyColor(d: string, c: ColorPalette): string {

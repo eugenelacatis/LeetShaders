@@ -1,34 +1,57 @@
-import { useState, useMemo, useCallback } from 'react';
-import {
-  Box,
-  Typography,
-  TextField,
-  InputAdornment,
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Box, Typography, keyframes } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { useChallenges } from '../backend/useChallenges';
-import { fadeInUp } from '../styles/animations';
-import { useColors } from '../hooks/useColors';
-import type { Challenge } from '../judge/types';
-import type { ColorPalette } from '../theme';
+import { ShaderCanvas } from '../components/ShaderCanvas';
+import { TRACKS } from '../judge/types';
+import type { Challenge, Track } from '../judge/types';
+import { tokens } from '../tokens';
+
+const t = tokens.color;
+const NARROW = '@media (max-width: 859.95px)';
+const REDUCED = '@media (prefers-reduced-motion: reduce)';
+const PRESS = `${tokens.motion.press} ${tokens.motion.pressEasing}`;
+const ledPulse = keyframes`50% { opacity: 0.7; box-shadow: none; }`;
 
 type Difficulty = Challenge['difficulty'];
-type SortKey = 'title' | 'difficulty';
-type StatusFilter = 'all' | 'solved' | 'unsolved';
 
-const DIFFICULTY_RANK: Record<Difficulty, number> = {
-  beginner: 0,
-  intermediate: 1,
-  advanced: 2,
-};
-
+const RANK: Record<Difficulty, number> = { beginner: 1, intermediate: 2, advanced: 3, expert: 4 };
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
   beginner: 'Easy',
   intermediate: 'Medium',
   advanced: 'Hard',
+  expert: 'Expert',
 };
+
+const TRACK_NAME: Record<Track, string> = {
+  color: 'Color and coordinates',
+  shapes: '2D shapes',
+  combining: 'Combining shapes',
+  patterns: 'Patterns and tiling',
+  noise: 'Procedural noise',
+  raymarching: '3D raymarching',
+  capstone: 'Capstones',
+};
+
+// Derived shades. Each one mixes locked tokens, so no new raw colors enter the page.
+const LED_OFF = `color-mix(in srgb, ${t.ground} 50%, ${t.edge})`;
+const CAP_HOVER = `color-mix(in srgb, ${t.surfaceRaised} 90%, ${t.text})`;
+const CAP_NEXT = `color-mix(in srgb, ${t.surfaceRaised} 85%, ${t.red})`;
+const CAP_GOLD = `color-mix(in srgb, ${t.ground} 82%, ${t.gold})`;
+const GLOW_PASS = `0 0 8px color-mix(in srgb, ${t.pass} 80%, transparent)`;
+const GLOW_RED = `0 0 10px color-mix(in srgb, ${t.red} 90%, transparent)`;
+const GLOW_GOLD = `0 0 10px color-mix(in srgb, ${t.gold} 80%, transparent)`;
+const WIRE_DIM = `color-mix(in srgb, ${t.text} 14%, transparent)`;
+const WIRE_DIM_GOLD = `color-mix(in srgb, ${t.gold} 35%, transparent)`;
+
+const srOnly = {
+  position: 'absolute',
+  width: '1px',
+  height: '1px',
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+} as const;
 
 function getSolvedSet(): Set<string> {
   const solved = new Set<string>();
@@ -51,234 +74,618 @@ function getSolvedSet(): Set<string> {
   return solved;
 }
 
-function FilterButton({ label, active, onClick, colors }: { label: string; active: boolean; onClick: () => void; colors: ColorPalette }) {
+// Easiest first; the expert boss key always lands last on its board.
+function byPath(a: Challenge, b: Challenge): number {
+  return RANK[a.difficulty] - RANK[b.difficulty] || a.title.localeCompare(b.title);
+}
+
+function ProgressBar({ value, height = 10 }: { value: number; height?: number }) {
+  return (
+    <Box sx={{ height, borderRadius: '99px', backgroundColor: t.edge, overflow: 'hidden' }}>
+      <Box
+        sx={{
+          height: '100%',
+          width: `${value * 100}%`,
+          borderRadius: '99px',
+          backgroundColor: t.pass,
+        }}
+      />
+    </Box>
+  );
+}
+
+function Pips({ difficulty }: { difficulty: Difficulty }) {
+  const expert = difficulty === 'expert';
+  const bars = expert ? [1, 2, 3, 4] : [1, 2, 3];
   return (
     <Box
-      component="button"
-      onClick={onClick}
+      component="span"
+      sx={{ display: 'inline-flex', gap: '3px', alignItems: 'flex-end', height: 15 }}
+    >
+      {bars.map((n) => (
+        <Box
+          key={n}
+          component="span"
+          sx={{
+            width: 4,
+            height: 3 + n * 3,
+            borderRadius: '1px',
+            backgroundColor:
+              n <= RANK[difficulty]
+                ? expert
+                  ? t.gold
+                  : t.text
+                : `color-mix(in srgb, ${t.text} 22%, transparent)`,
+          }}
+        />
+      ))}
+    </Box>
+  );
+}
+
+function TrackSquares({ mixes }: { mixes: Track[] }) {
+  return (
+    <Box component="span" sx={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+      {mixes.map((m) => (
+        <Box
+          key={m}
+          component="span"
+          title={TRACK_NAME[m]}
+          sx={{
+            width: 26,
+            height: 26,
+            borderRadius: tokens.radius.sm,
+            backgroundColor: t.ground,
+            border: `${tokens.border} solid ${t.edge}`,
+            display: 'grid',
+            placeItems: 'center',
+            fontWeight: 800,
+            fontSize: tokens.type.small.size,
+            color: t.blueUi,
+          }}
+        >
+          {TRACKS.indexOf(m) + 1}
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+interface KeyProps {
+  challenge: Challenge;
+  solved: boolean;
+  next: boolean;
+  boss: boolean;
+  capstone: boolean;
+  col: number;
+  row: number;
+}
+
+function Key({ challenge, solved, next, boss, capstone, col, row }: KeyProps) {
+  const gold = boss || capstone;
+  const size = capstone
+    ? { wide: 168, narrow: 140 }
+    : boss
+      ? { wide: 136, narrow: 96 }
+      : { wide: 104, narrow: 84 };
+  const ledColor = solved ? t.pass : next ? t.red : boss ? t.gold : LED_OFF;
+  const ledGlow = solved ? GLOW_PASS : next ? GLOW_RED : boss ? GLOW_GOLD : 'none';
+  const status = solved ? 'Solved' : next ? 'Up next' : null;
+
+  return (
+    <Box
+      component="li"
+      sx={{ gridColumn: col, gridRow: row, display: 'flex', justifyContent: 'center', zIndex: 1 }}
+    >
+      <Box
+        component={Link}
+        to={`/challenges/${challenge.slug}`}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 1,
+          textAlign: 'center',
+          textDecoration: 'none',
+          color: t.text,
+          outline: 'none',
+          '&:hover .cap': { backgroundColor: gold ? CAP_GOLD : CAP_HOVER },
+          '&:active .cap': {
+            transform: 'translateY(5px)',
+            boxShadow: `0 1px 0 ${t.edge}${gold ? `, inset 0 0 0 3px ${t.gold}` : ''}`,
+          },
+          '&:focus-visible .cap': { outline: `3px solid ${t.blueUi}`, outlineOffset: '3px' },
+        }}
+      >
+        <Box
+          className="cap"
+          data-cap
+          sx={{
+            position: 'relative',
+            width: size.wide,
+            height: size.wide,
+            p: gold ? '10px' : 1,
+            borderRadius: '16px',
+            backgroundColor: gold ? CAP_GOLD : next ? CAP_NEXT : t.surfaceRaised,
+            border: `${tokens.border} solid ${t.edge}`,
+            boxShadow: `0 ${capstone ? 8 : boss ? 7 : 6}px 0 ${t.edge}${gold ? `, inset 0 0 0 3px ${t.gold}` : ''}`,
+            transition: `transform ${PRESS}, box-shadow ${PRESS}`,
+            [NARROW]: { width: size.narrow, height: size.narrow, p: '6px' },
+            [REDUCED]: { transition: 'none' },
+          }}
+        >
+          <Box
+            sx={{
+              width: '100%',
+              height: '100%',
+              borderRadius: '9px',
+              overflow: 'hidden',
+              border: `${tokens.border} solid ${t.edge}`,
+              backgroundColor: t.previewBg,
+            }}
+          >
+            <ShaderCanvas src={challenge.referenceShaderSrc} />
+          </Box>
+          <Box
+            component="span"
+            sx={{
+              position: 'absolute',
+              top: -6,
+              right: -6,
+              width: boss ? 18 : 16,
+              height: boss ? 18 : 16,
+              borderRadius: '50%',
+              border: `${tokens.border} solid ${t.edge}`,
+              backgroundColor: ledColor,
+              boxShadow: ledGlow,
+              ...(next && {
+                animation: `${ledPulse} 2.4s ease-in-out infinite`,
+                [REDUCED]: { animation: 'none' },
+              }),
+            }}
+          />
+          {boss && (
+            <Box
+              component="span"
+              aria-hidden
+              sx={{
+                position: 'absolute',
+                left: '50%',
+                bottom: -12,
+                transform: 'translateX(-50%)',
+                px: '10px',
+                py: '1px',
+                borderRadius: tokens.radius.sm,
+                border: `${tokens.border} solid ${t.edge}`,
+                backgroundColor: t.gold,
+                color: t.edge,
+                fontSize: tokens.type.small.size,
+                fontWeight: 800,
+              }}
+            >
+              Boss
+            </Box>
+          )}
+        </Box>
+        <Box
+          component="span"
+          sx={{
+            mt: boss ? '6px' : 0,
+            maxWidth: 150,
+            fontSize: tokens.type.label.size,
+            fontWeight: tokens.type.label.weight,
+            lineHeight: tokens.type.label.leading,
+            [NARROW]: { fontSize: tokens.type.small.size },
+          }}
+        >
+          {challenge.title}
+        </Box>
+        {capstone && challenge.mixes?.length ? (
+          <TrackSquares mixes={challenge.mixes} />
+        ) : (
+          <Pips difficulty={challenge.difficulty} />
+        )}
+        <Box component="span" sx={srOnly}>
+          {[boss && 'Boss key', DIFFICULTY_LABEL[challenge.difficulty], status]
+            .filter(Boolean)
+            .join(', ')}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+// Snake order: odd rows run right to left, so the path reads as one wire.
+function gridSpot(i: number, cols: number): { col: number; row: number } {
+  const row = Math.floor(i / cols);
+  const c = i % cols;
+  return { row: row + 1, col: row % 2 ? cols - c : c + 1 };
+}
+
+interface Wires {
+  w: number;
+  h: number;
+  lit: string;
+  dim: string;
+}
+
+interface BoardProps {
+  number: number;
+  track: Track;
+  items: Challenge[];
+  solvedSet: Set<string>;
+}
+
+function Board({ number, track, items, solvedSet }: BoardProps) {
+  const capstone = track === 'capstone';
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+  const [wires, setWires] = useState<Wires | null>(null);
+
+  const cols = capstone ? (width < 640 ? 2 : 4) : width < 420 ? 3 : width < 700 ? 4 : 6;
+  const solvedCount = items.filter((c) => solvedSet.has(c.id)).length;
+  const next = items.find((c) => !solvedSet.has(c.id));
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Measure each cap after layout and draw the trace between them.
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el || width === 0) return;
+    const box = el.getBoundingClientRect();
+    const caps = [...el.querySelectorAll<HTMLElement>('[data-cap]')];
+    const pts = caps.map((c) => {
+      const r = c.getBoundingClientRect();
+      return [r.left + r.width / 2 - box.left, r.top + r.height / 2 - box.top] as const;
+    });
+    const solved = (i: number) => solvedSet.has(items[i].id);
+    const isNext = (i: number) => items[i] === next;
+    // A wire lights when it joins two solved keys, or a solved key and the next one.
+    const litWire = (i: number) =>
+      (solved(i) && (solved(i + 1) || isNext(i + 1))) || (isNext(i) && solved(i + 1));
+    const seg = (a: number) => {
+      const [x1, y1] = pts[a];
+      const [x2, y2] = pts[a + 1];
+      // Same row: run straight at the smaller key's center, which still meets the taller boss cap.
+      if (gridSpot(a, cols).row === gridSpot(a + 1, cols).row) {
+        const y = Math.min(y1, y2);
+        return `M${x1},${y} H${x2}`;
+      }
+      // Turn outside the row, half a column past the last key.
+      const out = gridSpot(a, cols).col === 1 ? -1 : 1;
+      const x = x1 + (out * box.width) / cols / 2;
+      return `M${x1},${y1} H${x} V${y2} H${x2}`;
+    };
+    let lit = '';
+    let dim = '';
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (litWire(i)) lit += seg(i);
+      else dim += seg(i);
+    }
+    setWires({ w: box.width, h: box.height, lit, dim });
+  }, [width, cols, items, solvedSet, next]);
+
+  return (
+    <Box
+      component="section"
+      aria-labelledby={`board-${track}`}
       sx={{
-        border: `1px solid ${active ? colors.accent : colors.border}`,
-        borderRadius: '4px',
-        px: 1.5,
-        py: 0.5,
-        fontSize: '0.75rem',
-        fontFamily: 'inherit',
-        cursor: 'pointer',
-        backgroundColor: active ? colors.surface : 'transparent',
-        color: active ? colors.textPrimary : colors.textSecondary,
-        transition: 'all 0.15s',
-        '&:hover': { backgroundColor: colors.surfaceHover, borderColor: colors.borderHover },
+        position: 'relative',
+        mb: 3.5,
+        p: '24px 28px 28px',
+        borderRadius: tokens.radius.xl,
+        border: `${tokens.border} solid ${t.edge}`,
+        backgroundColor: capstone ? `color-mix(in srgb, ${t.ground} 80%, ${t.edge})` : t.surface,
+        backgroundImage: `radial-gradient(color-mix(in srgb, ${t.text} 6%, transparent) 1px, transparent 1.4px)`,
+        backgroundSize: '16px 16px',
+        boxShadow: capstone ? tokens.shadow.xl : tokens.shadow.lg,
+        [NARROW]: { p: '18px 14px 22px' },
       }}
     >
-      {label}
+      <Box
+        component="header"
+        sx={{ display: 'flex', alignItems: 'center', gap: 1.75, mb: 2.5, flexWrap: 'wrap' }}
+      >
+        <Typography
+          component="h2"
+          id={`board-${track}`}
+          sx={{
+            fontSize: tokens.type.h3.size,
+            fontWeight: tokens.type.h3.weight,
+            letterSpacing: tokens.type.h3.tracking,
+            lineHeight: tokens.type.h3.leading,
+            px: 1.75,
+            py: 0.5,
+            borderRadius: tokens.radius.sm,
+            border: `${tokens.border} solid ${t.edge}`,
+            backgroundColor: capstone ? t.gold : t.ground,
+            color: capstone ? t.edge : t.text,
+            boxShadow: capstone ? 'none' : `inset 2px 2px 0 ${t.edge}`,
+          }}
+        >
+          <Box component="b" sx={{ color: capstone ? t.edge : t.blueUi, mr: 1 }}>
+            {number}
+          </Box>
+          {TRACK_NAME[track]}
+        </Typography>
+        {items.length > 0 && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.25,
+              color: t.textSoft,
+              fontSize: tokens.type.label.size,
+              fontWeight: 600,
+            }}
+          >
+            <Box component="span" aria-hidden sx={{ display: 'inline-flex', gap: '4px' }}>
+              {items.map((c) => (
+                <Box
+                  key={c.id}
+                  component="span"
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    border: `1px solid ${t.edge}`,
+                    backgroundColor: solvedSet.has(c.id)
+                      ? t.pass
+                      : c.difficulty === 'expert'
+                        ? CAP_GOLD
+                        : LED_OFF,
+                    boxShadow: solvedSet.has(c.id) ? GLOW_PASS : 'none',
+                  }}
+                />
+              ))}
+            </Box>
+            {solvedCount} of {items.length} solved
+          </Box>
+        )}
+        {capstone && (
+          <Typography sx={{ color: t.textSoft, flex: '1 1 260px' }}>
+            Each one mixes two tracks. The squares under a key name the tracks it draws on.
+          </Typography>
+        )}
+      </Box>
+
+      {items.length === 0 ? (
+        <Box
+          sx={{
+            p: 3,
+            borderRadius: tokens.radius.lg,
+            border: `${tokens.border} dashed color-mix(in srgb, ${t.text} 25%, transparent)`,
+            color: t.textSoft,
+          }}
+        >
+          The first challenges for this board are on the way.
+        </Box>
+      ) : (
+        <Box ref={wrapRef} sx={{ position: 'relative' }}>
+          {wires && (
+            <svg
+              aria-hidden
+              width={wires.w}
+              height={wires.h}
+              viewBox={`0 0 ${wires.w} ${wires.h}`}
+              style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'visible' }}
+            >
+              <path
+                d={wires.dim}
+                fill="none"
+                stroke={t.edge}
+                strokeWidth={10}
+                strokeLinejoin="round"
+              />
+              <path
+                d={wires.dim}
+                fill="none"
+                style={{ stroke: capstone ? WIRE_DIM_GOLD : WIRE_DIM }}
+                strokeWidth={4}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                strokeDasharray="2 8"
+              />
+              <path
+                d={wires.lit}
+                fill="none"
+                stroke={t.edge}
+                strokeWidth={10}
+                strokeLinejoin="round"
+              />
+              <path
+                d={wires.lit}
+                fill="none"
+                stroke={t.pass}
+                strokeWidth={4}
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+          <Box
+            component="ol"
+            sx={{
+              position: 'relative',
+              listStyle: 'none',
+              m: 0,
+              p: 0,
+              display: 'grid',
+              gridTemplateColumns: `repeat(${cols}, 1fr)`,
+              rowGap: 3.5,
+              columnGap: 1.5,
+              alignItems: 'start',
+            }}
+          >
+            {items.map((c, i) => {
+              const { col, row } = gridSpot(i, cols);
+              return (
+                <Key
+                  key={c.id}
+                  challenge={c}
+                  solved={solvedSet.has(c.id)}
+                  next={c === next}
+                  boss={!capstone && c.difficulty === 'expert'}
+                  capstone={capstone}
+                  col={col}
+                  row={row}
+                />
+              );
+            })}
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function LoadingBoard({ number }: { number: number }) {
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        mb: 3.5,
+        p: '24px 28px 28px',
+        borderRadius: tokens.radius.xl,
+        border: `${tokens.border} solid ${t.edge}`,
+        backgroundColor: t.surface,
+        boxShadow: tokens.shadow.lg,
+        [NARROW]: { p: '18px 14px 22px' },
+      }}
+    >
+      <Box
+        sx={{
+          width: 220,
+          height: 36,
+          mb: 2.5,
+          borderRadius: tokens.radius.sm,
+          backgroundColor: t.ground,
+        }}
+      >
+        <Box
+          component="b"
+          sx={{
+            display: 'inline-block',
+            p: '4px 14px',
+            color: t.blueUi,
+            fontSize: tokens.type.h3.size,
+            fontWeight: 800,
+          }}
+        >
+          {number}
+        </Box>
+      </Box>
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+        {[0, 1, 2, 3].map((i) => (
+          <Box
+            key={i}
+            sx={{
+              width: 104,
+              height: 104,
+              borderRadius: '16px',
+              border: `${tokens.border} solid ${t.edge}`,
+              backgroundColor: t.surfaceRaised,
+              boxShadow: `0 6px 0 ${t.edge}`,
+              [NARROW]: { width: 84, height: 84 },
+            }}
+          />
+        ))}
+      </Box>
     </Box>
   );
 }
 
 export default function ChallengeList() {
-  const colors = useColors();
   const { data, loading, error } = useChallenges();
-  const [search, setSearch] = useState('');
-  const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | 'all'>('all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [sortBy, setSortBy] = useState<SortKey>('difficulty');
-
   const solvedSet = useMemo(() => getSolvedSet(), []);
 
-  const DIFFICULTY_TEXT_COLOR: Record<Difficulty, string> = {
-    beginner: colors.success,
-    intermediate: colors.warning,
-    advanced: colors.danger,
-  };
+  const boards = useMemo(() => {
+    const all = data ?? [];
+    return (
+      TRACKS.map((track) => ({ track, items: all.filter((c) => c.track === track).sort(byPath) }))
+        // The capstone board appears once it has challenges; the six tracks always show, so the numbering holds.
+        .filter((b) => b.track !== 'capstone' || b.items.length > 0)
+    );
+  }, [data]);
 
-  const filtered = useMemo(() => {
-    let list = data ?? [];
-    if (difficultyFilter !== 'all') {
-      list = list.filter((c) => c.difficulty === difficultyFilter);
-    }
-    if (statusFilter !== 'all') {
-      list = list.filter((c) => statusFilter === 'solved' ? solvedSet.has(c.id) : !solvedSet.has(c.id));
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (c) => c.title.toLowerCase().includes(q) || c.description.toLowerCase().includes(q),
-      );
-    }
-    const sorted = [...list];
-    if (sortBy === 'difficulty') {
-      sorted.sort((a, b) => DIFFICULTY_RANK[a.difficulty] - DIFFICULTY_RANK[b.difficulty] || a.title.localeCompare(b.title));
-    } else {
-      sorted.sort((a, b) => a.title.localeCompare(b.title));
-    }
-    return sorted;
-  }, [data, search, difficultyFilter, statusFilter, sortBy, solvedSet]);
-
-  const setDifficulty = useCallback((v: Difficulty | 'all') => setDifficultyFilter(v), []);
-  const setStatus = useCallback((v: StatusFilter) => setStatusFilter(v), []);
-  const setSort = useCallback((v: SortKey) => setSortBy(v), []);
+  const total = data?.length ?? 0;
+  const solved = data?.filter((c) => solvedSet.has(c.id)).length ?? 0;
 
   return (
-    <Box sx={{ px: { xs: 2, md: 4 }, py: 4, maxWidth: 1200, mx: 'auto' }}>
-      <Typography variant="h4" sx={{ mb: 0.5, color: colors.textPrimary }}>
-        Challenges
-      </Typography>
-      <Typography sx={{ color: colors.textSecondary, fontSize: '0.85rem', mb: 4 }}>
-        {data ? `${data.length} problems` : 'Loading...'}
-      </Typography>
-
-      {/* Toolbar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
-        <TextField
-          size="small"
-          placeholder="Filter by name..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: 16, color: colors.textTertiary }} />
-                </InputAdornment>
-              ),
-            },
-          }}
+    <Box sx={{ maxWidth: 1280, mx: 'auto', px: 4, pt: 4, pb: 10, [NARROW]: { px: 2 } }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 3,
+          flexWrap: 'wrap',
+          mb: 3.5,
+        }}
+      >
+        <Typography
+          component="h1"
           sx={{
-            width: 200,
-            '& .MuiOutlinedInput-root': {
-              fontSize: '0.8rem',
-              backgroundColor: colors.surface,
-              '& fieldset': { borderColor: colors.border },
-              '&:hover fieldset': { borderColor: colors.borderHover },
-              '&.Mui-focused fieldset': { borderColor: colors.accent },
-            },
-            '& .MuiInputBase-input': { color: colors.textPrimary },
+            fontSize: tokens.type.display.size,
+            fontWeight: tokens.type.display.weight,
+            letterSpacing: tokens.type.display.tracking,
+            lineHeight: tokens.type.display.leading,
+            color: t.text,
           }}
-        />
-
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <FilterButton label="All" active={difficultyFilter === 'all'} onClick={() => setDifficulty('all')} colors={colors} />
-          <FilterButton label="Easy" active={difficultyFilter === 'beginner'} onClick={() => setDifficulty('beginner')} colors={colors} />
-          <FilterButton label="Medium" active={difficultyFilter === 'intermediate'} onClick={() => setDifficulty('intermediate')} colors={colors} />
-          <FilterButton label="Hard" active={difficultyFilter === 'advanced'} onClick={() => setDifficulty('advanced')} colors={colors} />
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <FilterButton label="All" active={statusFilter === 'all'} onClick={() => setStatus('all')} colors={colors} />
-          <FilterButton label="Solved" active={statusFilter === 'solved'} onClick={() => setStatus('solved')} colors={colors} />
-          <FilterButton label="Unsolved" active={statusFilter === 'unsolved'} onClick={() => setStatus('unsolved')} colors={colors} />
-        </Box>
-
-        <Box sx={{ flex: 1 }} />
-
-        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-          <Typography sx={{ fontSize: '0.7rem', color: colors.textTertiary, mr: 0.5 }}>Sort:</Typography>
-          <FilterButton label="Difficulty" active={sortBy === 'difficulty'} onClick={() => setSort('difficulty')} colors={colors} />
-          <FilterButton label="Name" active={sortBy === 'title'} onClick={() => setSort('title')} colors={colors} />
-        </Box>
+        >
+          Challenges
+        </Typography>
+        {total > 0 && (
+          <Box sx={{ minWidth: 240 }}>
+            <Typography
+              sx={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}
+            >
+              {solved} solved
+              <Box
+                component="span"
+                sx={{
+                  ml: 0.5,
+                  color: t.textSoft,
+                  fontWeight: 600,
+                  fontSize: tokens.type.label.size,
+                }}
+              >
+                of {total}
+              </Box>
+            </Typography>
+            <Box sx={{ mt: 0.75 }}>
+              <ProgressBar value={solved / total} />
+            </Box>
+          </Box>
+        )}
       </Box>
 
       {error && (
-        <Typography sx={{ color: colors.danger, fontSize: '0.85rem', mb: 2 }} role="alert">
+        <Typography role="alert" sx={{ color: t.red, mb: 2 }}>
           {error.message}
         </Typography>
       )}
 
-      {/* Table header */}
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 80px 80px',
-          gap: 2,
-          px: 2,
-          py: 1,
-          borderBottom: `1px solid ${colors.border}`,
-        }}
-      >
-        {['Title', 'Difficulty', 'Status'].map((h, i) => (
-          <Typography
-            key={h}
-            sx={{
-              fontSize: '0.7rem',
-              color: colors.textTertiary,
-              fontWeight: 600,
-              textAlign: i === 2 ? 'center' : 'left',
-            }}
-          >
-            {h}
-          </Typography>
-        ))}
-      </Box>
-
-      {/* Rows */}
-      {filtered.map((c, i) => {
-        const solved = solvedSet.has(c.id);
-        return (
-          <Box
-            key={c.id}
-            component={Link}
-            to={`/challenges/${c.slug}`}
-            sx={{
-              textDecoration: 'none',
-              display: 'grid',
-              gridTemplateColumns: '1fr 80px 80px',
-              gap: 2,
-              alignItems: 'center',
-              px: 2,
-              py: 1.5,
-              borderBottom: `1px solid ${colors.border}`,
-              transition: 'background-color 0.1s',
-              opacity: 0,
-              animation: `${fadeInUp} 0.2s ease ${i * 0.03}s forwards`,
-              '&:hover': { backgroundColor: colors.surfaceHover },
-            }}
-          >
-            <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontSize: '0.85rem', fontWeight: 500, color: colors.textPrimary, mb: 0.25 }}>
-                {c.title}
-              </Typography>
-              <Typography
-                sx={{
-                  fontSize: '0.75rem',
-                  color: colors.textSecondary,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {c.description}
-              </Typography>
-            </Box>
-
-            <Typography
-              sx={{
-                fontSize: '0.75rem',
-                fontWeight: 500,
-                color: DIFFICULTY_TEXT_COLOR[c.difficulty],
-              }}
-            >
-              {DIFFICULTY_LABEL[c.difficulty]}
-            </Typography>
-
-            <Box sx={{ textAlign: 'center' }}>
-              {solved ? (
-                <CheckCircleOutlineIcon sx={{ fontSize: 16, color: colors.success }} />
-              ) : (
-                <Typography sx={{ fontSize: '0.7rem', color: colors.textTertiary }}>--</Typography>
-              )}
-            </Box>
-          </Box>
-        );
-      })}
-
-      {!loading && filtered.length === 0 && !error && (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography sx={{ color: colors.textSecondary, fontSize: '0.85rem' }}>
-            {search || difficultyFilter !== 'all' || statusFilter !== 'all'
-              ? 'No challenges match your filters.'
-              : 'No challenges available yet.'}
-          </Typography>
-        </Box>
+      {loading ? (
+        <>
+          <LoadingBoard number={1} />
+          <LoadingBoard number={2} />
+        </>
+      ) : (
+        boards.map((b) => (
+          <Board
+            key={b.track}
+            number={TRACKS.indexOf(b.track) + 1}
+            track={b.track}
+            items={b.items}
+            solvedSet={solvedSet}
+          />
+        ))
       )}
     </Box>
   );

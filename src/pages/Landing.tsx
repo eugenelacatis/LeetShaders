@@ -18,6 +18,7 @@ const LEVEL: Record<Challenge['difficulty'], number> = {
   beginner: 1,
   intermediate: 2,
   advanced: 3,
+  expert: 4,
 };
 
 // CSS stand-ins for each challenge's output, so the shelf costs no extra WebGL work.
