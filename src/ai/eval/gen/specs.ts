@@ -2116,6 +2116,1023 @@ void main() {
       ],
     } satisfies ChallengeSpec;
   })(),
+
+  // ─── union (beginner, track 3) ───────────────────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      {
+        label: 'radius-up',
+        edits: [
+          ['vec2(-0.3, 0.0)) - 0.4;', 'vec2(-0.3, 0.0)) - 0.42;'],
+          ['vec2(0.3, 0.0)) - 0.4;', 'vec2(0.3, 0.0)) - 0.42;'],
+        ],
+      },
+      {
+        label: 'radius-down',
+        edits: [
+          ['vec2(-0.3, 0.0)) - 0.4;', 'vec2(-0.3, 0.0)) - 0.38;'],
+          ['vec2(0.3, 0.0)) - 0.4;', 'vec2(0.3, 0.0)) - 0.38;'],
+        ],
+      },
+      {
+        label: 'wider',
+        edits: [
+          ['vec2(-0.3, 0.0)', 'vec2(-0.32, 0.0)'],
+          ['vec2(0.3, 0.0)', 'vec2(0.32, 0.0)'],
+        ],
+      },
+      {
+        label: 'closer',
+        edits: [
+          ['vec2(-0.3, 0.0)', 'vec2(-0.28, 0.0)'],
+          ['vec2(0.3, 0.0)', 'vec2(0.28, 0.0)'],
+        ],
+      },
+      { label: 'shift-y', edits: [['float d1 = length(uv', 'uv.y -= 0.02;\n    float d1 = length(uv']] },
+      { label: 'soft-edge', edits: [['smoothstep(-0.01, 0.01, d)', 'smoothstep(-0.03, 0.03, d)']] },
+      { label: 'hard-edge', edits: [['1.0 - smoothstep(-0.01, 0.01, d)', '1.0 - step(0.0, d)']] },
+      { label: 'dim', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * 0.92, 1.0)']] },
+      { label: 'grey-bg', edits: [['vec4(vec3(mask), 1.0)', 'vec4(mix(vec3(0.04), vec3(1.0), mask), 1.0)']] },
+      { label: 'warm', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * vec3(1.0, 0.97, 0.92), 1.0)']] },
+    ];
+    return {
+      slug: 'union',
+      others: ['checkerboard', 'polar-pattern', 'line-segment', 'stripes'],
+      renames: { uv: 'p', d1: 'left', d2: 'right', d: 'dist', mask: 'inside' },
+      handCorrect: [
+        {
+          label: 'circle-helper',
+          src: `${HEADER}
+float sdCircle(vec2 p, vec2 c, float r) {
+  return length(p - c) - r;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = min(sdCircle(uv, vec2(-0.3, 0.0), 0.4), sdCircle(uv, vec2(0.3, 0.0), 0.4));
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'mirror-fold',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 q = vec2(abs(uv.x), uv.y);
+  float d = length(q - vec2(0.3, 0.0)) - 0.4;
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'center-loop',
+          src: `${HEADER}
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5 * u_resolution;
+  p /= 0.5 * min(u_resolution.x, u_resolution.y);
+  float d = 1e9;
+  for (int i = 0; i < 2; i++) {
+    vec2 c = vec2(i == 0 ? -0.3 : 0.3, 0.0);
+    d = min(d, distance(p, c) - 0.4);
+  }
+  fragColor = vec4(mix(vec3(1.0), vec3(0.0), smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'linear-aa',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = min(length(uv + vec2(0.3, 0.0)), length(uv - vec2(0.3, 0.0))) - 0.4;
+  float k = clamp(0.5 - d / 0.02, 0.0, 1.0);
+  fragColor = vec4(k, k, k, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'zoom'],
+      wrong: [
+        { label: 'intersection', edits: [['min(d1, d2)', 'max(d1, d2)']] },
+        { label: 'one-circle', edits: [['min(d1, d2)', 'd1']] },
+        { label: 'subtract', edits: [['min(d1, d2)', 'max(d1, -d2)']] },
+        {
+          label: 'small',
+          edits: [
+            ['vec2(-0.3, 0.0)) - 0.4;', 'vec2(-0.3, 0.0)) - 0.2;'],
+            ['vec2(0.3, 0.0)) - 0.4;', 'vec2(0.3, 0.0)) - 0.2;'],
+          ],
+        },
+      ],
+      injectMild: injectFrom(almost, 'radius-up', 'shift-y'),
+      injectBorderline: [
+        {
+          label: 'inject-big',
+          edits: [
+            ['vec2(-0.3, 0.0)) - 0.4;', 'vec2(-0.3, 0.0)) - 0.47;'],
+            ['vec2(0.3, 0.0)) - 0.4;', 'vec2(0.3, 0.0)) - 0.47;'],
+          ],
+        },
+        {
+          label: 'inject-far',
+          edits: [
+            ['vec2(-0.3, 0.0)', 'vec2(-0.38, 0.0)'],
+            ['vec2(0.3, 0.0)', 'vec2(0.38, 0.0)'],
+          ],
+        },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── intersection (beginner, track 3) ────────────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      {
+        label: 'radius-up',
+        edits: [
+          ['vec2(-0.25, 0.0)) - 0.55;', 'vec2(-0.25, 0.0)) - 0.57;'],
+          ['vec2(0.25, 0.0)) - 0.55;', 'vec2(0.25, 0.0)) - 0.57;'],
+        ],
+      },
+      {
+        label: 'radius-down',
+        edits: [
+          ['vec2(-0.25, 0.0)) - 0.55;', 'vec2(-0.25, 0.0)) - 0.53;'],
+          ['vec2(0.25, 0.0)) - 0.55;', 'vec2(0.25, 0.0)) - 0.53;'],
+        ],
+      },
+      {
+        label: 'wider',
+        edits: [
+          ['vec2(-0.25, 0.0)', 'vec2(-0.27, 0.0)'],
+          ['vec2(0.25, 0.0)', 'vec2(0.27, 0.0)'],
+        ],
+      },
+      {
+        label: 'closer',
+        edits: [
+          ['vec2(-0.25, 0.0)', 'vec2(-0.23, 0.0)'],
+          ['vec2(0.25, 0.0)', 'vec2(0.23, 0.0)'],
+        ],
+      },
+      { label: 'shift-y', edits: [['float d1 = length(uv', 'uv.y -= 0.02;\n    float d1 = length(uv']] },
+      { label: 'soft-edge', edits: [['smoothstep(-0.01, 0.01, d)', 'smoothstep(-0.03, 0.03, d)']] },
+      { label: 'hard-edge', edits: [['1.0 - smoothstep(-0.01, 0.01, d)', '1.0 - step(0.0, d)']] },
+      { label: 'dim', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * 0.92, 1.0)']] },
+      { label: 'grey-bg', edits: [['vec4(vec3(mask), 1.0)', 'vec4(mix(vec3(0.04), vec3(1.0), mask), 1.0)']] },
+      { label: 'warm', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * vec3(1.0, 0.97, 0.92), 1.0)']] },
+    ];
+    return {
+      slug: 'intersection',
+      others: ['triangle', 'checkerboard', 'ring', 'stripes'],
+      renames: { uv: 'p', d1: 'left', d2: 'right', d: 'dist', mask: 'inside' },
+      handCorrect: [
+        {
+          label: 'circle-helper',
+          src: `${HEADER}
+float sdCircle(vec2 p, vec2 c, float r) {
+  return length(p - c) - r;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = max(sdCircle(uv, vec2(-0.25, 0.0), 0.55), sdCircle(uv, vec2(0.25, 0.0), 0.55));
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'far-center',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  // The farther circle always gives the larger distance.
+  float d = length(vec2(abs(uv.x) + 0.25, uv.y)) - 0.55;
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'center-loop',
+          src: `${HEADER}
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5 * u_resolution;
+  p /= 0.5 * min(u_resolution.x, u_resolution.y);
+  float d = -1e9;
+  for (int i = 0; i < 2; i++) {
+    vec2 c = vec2(i == 0 ? -0.25 : 0.25, 0.0);
+    d = max(d, distance(p, c) - 0.55);
+  }
+  fragColor = vec4(mix(vec3(1.0), vec3(0.0), smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'linear-aa',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = max(length(uv + vec2(0.25, 0.0)), length(uv - vec2(0.25, 0.0))) - 0.55;
+  float k = clamp(0.5 - d / 0.02, 0.0, 1.0);
+  fragColor = vec4(k, k, k, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'zoom'],
+      wrong: [
+        { label: 'union', edits: [['max(d1, d2)', 'min(d1, d2)']] },
+        { label: 'one-circle', edits: [['max(d1, d2)', 'd1']] },
+        { label: 'subtract', edits: [['max(d1, d2)', 'max(d1, -d2)']] },
+        {
+          label: 'sideways',
+          edits: [
+            ['vec2(-0.25, 0.0)', 'vec2(0.0, -0.25)'],
+            ['vec2(0.25, 0.0)', 'vec2(0.0, 0.25)'],
+          ],
+        },
+      ],
+      injectMild: injectFrom(almost, 'radius-up', 'shift-y'),
+      injectBorderline: [
+        {
+          label: 'inject-big',
+          edits: [
+            ['vec2(-0.25, 0.0)) - 0.55;', 'vec2(-0.25, 0.0)) - 0.62;'],
+            ['vec2(0.25, 0.0)) - 0.55;', 'vec2(0.25, 0.0)) - 0.62;'],
+          ],
+        },
+        {
+          label: 'inject-apart',
+          edits: [
+            ['vec2(-0.25, 0.0)', 'vec2(-0.33, 0.0)'],
+            ['vec2(0.25, 0.0)', 'vec2(0.33, 0.0)'],
+          ],
+        },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── subtraction (beginner, track 3) ─────────────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'disc-up', edits: [['length(uv) - 0.6', 'length(uv) - 0.62']] },
+      { label: 'disc-down', edits: [['length(uv) - 0.6', 'length(uv) - 0.58']] },
+      { label: 'bite-up', edits: [['vec2(0.4, 0.0)) - 0.4', 'vec2(0.4, 0.0)) - 0.42']] },
+      { label: 'bite-down', edits: [['vec2(0.4, 0.0)) - 0.4', 'vec2(0.4, 0.0)) - 0.38']] },
+      { label: 'bite-shift', edits: [['vec2(0.4, 0.0)', 'vec2(0.42, 0.0)']] },
+      { label: 'shift-y', edits: [['float disc = length(uv)', 'uv.y -= 0.02;\n    float disc = length(uv)']] },
+      { label: 'soft-edge', edits: [['smoothstep(-0.01, 0.01, d)', 'smoothstep(-0.03, 0.03, d)']] },
+      { label: 'hard-edge', edits: [['1.0 - smoothstep(-0.01, 0.01, d)', '1.0 - step(0.0, d)']] },
+      { label: 'dim', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * 0.92, 1.0)']] },
+      { label: 'grey-bg', edits: [['vec4(vec3(mask), 1.0)', 'vec4(mix(vec3(0.04), vec3(1.0), mask), 1.0)']] },
+    ];
+    return {
+      slug: 'subtraction',
+      others: ['star', 'checkerboard', 'polar-pattern', 'line-segment'],
+      renames: { uv: 'p', disc: 'body', bite: 'hole', d: 'dist', mask: 'inside' },
+      handCorrect: [
+        {
+          label: 'circle-helper',
+          src: `${HEADER}
+float sdCircle(vec2 p, vec2 c, float r) {
+  return length(p - c) - r;
+}
+
+float opSubtract(float a, float b) {
+  return max(a, -b);
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = opSubtract(sdCircle(uv, vec2(0.0), 0.6), sdCircle(uv, vec2(0.4, 0.0), 0.4));
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'outside-bite',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float inDisc = length(uv) - 0.6;
+  float outBite = 0.4 - distance(uv, vec2(0.4, 0.0));
+  float d = max(inDisc, outBite);
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5 * u_resolution;
+  p /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec2 b = p - vec2(0.4, 0.0);
+  float d = max(sqrt(dot(p, p)) - 0.6, 0.4 - sqrt(dot(b, b)));
+  fragColor = vec4(mix(vec3(1.0), vec3(0.0), smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'linear-aa',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = max(length(uv) - 0.6, -(length(uv - vec2(0.4, 0.0)) - 0.4));
+  float k = clamp(0.5 - d / 0.02, 0.0, 1.0);
+  fragColor = vec4(k, k, k, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'mirror-x'],
+      wrong: [
+        { label: 'no-bite', edits: [['max(disc, -bite)', 'disc']] },
+        { label: 'bite-only', edits: [['max(disc, -bite)', 'bite']] },
+        { label: 'intersect', edits: [['max(disc, -bite)', 'max(disc, bite)']] },
+        { label: 'union', edits: [['max(disc, -bite)', 'min(disc, bite)']] },
+      ],
+      injectMild: injectFrom(almost, 'disc-up', 'bite-up'),
+      injectBorderline: [
+        { label: 'inject-small-bite', edits: [['vec2(0.4, 0.0)) - 0.4', 'vec2(0.4, 0.0)) - 0.3']] },
+        { label: 'inject-big-disc', edits: [['length(uv) - 0.6', 'length(uv) - 0.68']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── smooth-union (intermediate, track 3) ────────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      {
+        label: 'radius-up',
+        edits: [
+          ['vec2(-0.35, 0.0)) - 0.35;', 'vec2(-0.35, 0.0)) - 0.37;'],
+          ['vec2(0.35, 0.0)) - 0.35;', 'vec2(0.35, 0.0)) - 0.37;'],
+        ],
+      },
+      {
+        label: 'radius-down',
+        edits: [
+          ['vec2(-0.35, 0.0)) - 0.35;', 'vec2(-0.35, 0.0)) - 0.33;'],
+          ['vec2(0.35, 0.0)) - 0.35;', 'vec2(0.35, 0.0)) - 0.33;'],
+        ],
+      },
+      { label: 'blend-up', edits: [['float k = 0.3;', 'float k = 0.33;']] },
+      { label: 'blend-down', edits: [['float k = 0.3;', 'float k = 0.27;']] },
+      {
+        label: 'wider',
+        edits: [
+          ['vec2(-0.35, 0.0)', 'vec2(-0.37, 0.0)'],
+          ['vec2(0.35, 0.0)', 'vec2(0.37, 0.0)'],
+        ],
+      },
+      { label: 'shift-y', edits: [['float d1 = length(uv', 'uv.y -= 0.02;\n    float d1 = length(uv']] },
+      { label: 'soft-edge', edits: [['smoothstep(-0.01, 0.01, d)', 'smoothstep(-0.03, 0.03, d)']] },
+      { label: 'hard-edge', edits: [['1.0 - smoothstep(-0.01, 0.01, d)', '1.0 - step(0.0, d)']] },
+      { label: 'dim', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * 0.92, 1.0)']] },
+      { label: 'grey-bg', edits: [['vec4(vec3(mask), 1.0)', 'vec4(mix(vec3(0.04), vec3(1.0), mask), 1.0)']] },
+    ];
+    return {
+      slug: 'smooth-union',
+      others: ['ring', 'triangle', 'checkerboard', 'stripes'],
+      renames: { uv: 'p', d1: 'left', d2: 'right', k: 'blend', h: 'w', mask: 'inside' },
+      handCorrect: [
+        {
+          label: 'smin-helper',
+          src: `${HEADER}
+float smin(float a, float b, float k) {
+  float h = max(k - abs(a - b), 0.0) / k;
+  return min(a, b) - h * h * k * 0.25;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = smin(length(uv + vec2(0.35, 0.0)) - 0.35, length(uv - vec2(0.35, 0.0)) - 0.35, 0.3);
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'mix-form',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float a = length(uv - vec2(-0.35, 0.0)) - 0.35;
+  float b = length(uv - vec2(0.35, 0.0)) - 0.35;
+  float k = 0.3;
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  float d = mix(b, a, h) - k * h * (1.0 - h);
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'mirror-fold',
+          src: `${HEADER}
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5 * u_resolution;
+  p /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec2 q = vec2(abs(p.x), p.y);
+  float near = distance(q, vec2(0.35, 0.0)) - 0.35;
+  float far = distance(q, vec2(-0.35, 0.0)) - 0.35;
+  float h = max(0.3 - abs(near - far), 0.0) / 0.3;
+  float d = min(near, far) - 0.075 * h * h;
+  fragColor = vec4(mix(vec3(1.0), vec3(0.0), smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'linear-aa',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d1 = length(uv + vec2(0.35, 0.0)) - 0.35;
+  float d2 = length(uv - vec2(0.35, 0.0)) - 0.35;
+  float h = max(0.3 - abs(d1 - d2), 0.0) / 0.3;
+  float d = min(d1, d2) - h * h * 0.075;
+  float c = clamp(0.5 - d / 0.02, 0.0, 1.0);
+  fragColor = vec4(c, c, c, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'zoom'],
+      wrong: [
+        { label: 'one-circle', edits: [['float d = min(d1, d2) - h * h * k * 0.25;', 'float d = d1;']] },
+        {
+          label: 'apart',
+          edits: [
+            ['vec2(-0.35, 0.0)', 'vec2(-0.6, 0.0)'],
+            ['vec2(0.35, 0.0)', 'vec2(0.6, 0.0)'],
+          ],
+        },
+        { label: 'huge-blend', edits: [['float k = 0.3;', 'float k = 1.5;']] },
+        { label: 'max', edits: [['float d = min(d1, d2) - h * h * k * 0.25;', 'float d = max(d1, d2);']] },
+      ],
+      injectMild: injectFrom(almost, 'blend-up', 'radius-up'),
+      injectBorderline: [
+        { label: 'inject-big-blend', edits: [['float k = 0.3;', 'float k = 0.6;']] },
+        {
+          label: 'inject-big',
+          edits: [
+            ['vec2(-0.35, 0.0)) - 0.35;', 'vec2(-0.35, 0.0)) - 0.42;'],
+            ['vec2(0.35, 0.0)) - 0.35;', 'vec2(0.35, 0.0)) - 0.42;'],
+          ],
+        },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── onion-rings (intermediate, track 3) ─────────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'radius-up', edits: [['length(uv) - 0.6', 'length(uv) - 0.61']] },
+      { label: 'radius-down', edits: [['length(uv) - 0.6', 'length(uv) - 0.59']] },
+      { label: 'spread-up', edits: [['abs(d) - 0.15', 'abs(d) - 0.16']] },
+      { label: 'spread-down', edits: [['abs(d) - 0.15', 'abs(d) - 0.14']] },
+      { label: 'thicker', edits: [['abs(d) - 0.04', 'abs(d) - 0.045']] },
+      { label: 'thinner', edits: [['abs(d) - 0.04', 'abs(d) - 0.035']] },
+      { label: 'shift-x', edits: [['length(uv)', 'length(uv - vec2(0.01, 0.0))']] },
+      { label: 'soft-edge', edits: [['smoothstep(-0.01, 0.01, d)', 'smoothstep(-0.02, 0.02, d)']] },
+      { label: 'dim', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * 0.92, 1.0)']] },
+      { label: 'warm', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * vec3(1.0, 0.97, 0.92), 1.0)']] },
+    ];
+    return {
+      slug: 'onion-rings',
+      others: ['circle-sdf', 'checkerboard', 'hexagon', 'polka-dots'],
+      renames: { uv: 'p', d: 'dist', mask: 'inside' },
+      handCorrect: [
+        {
+          label: 'onion-helper',
+          src: `${HEADER}
+float opOnion(float d, float r) {
+  return abs(d) - r;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = opOnion(opOnion(length(uv) - 0.6, 0.15), 0.04);
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'two-rings',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float r = length(uv);
+  float d = min(abs(r - 0.45), abs(r - 0.75)) - 0.04;
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'ring-union',
+          src: `${HEADER}
+float sdRing(float r, float radius, float halfWidth) {
+  return abs(r - radius) - halfWidth;
+}
+
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5 * u_resolution;
+  p /= 0.5 * min(u_resolution.x, u_resolution.y);
+  float r = sqrt(dot(p, p));
+  float d = min(sdRing(r, 0.45, 0.04), sdRing(r, 0.75, 0.04));
+  fragColor = vec4(mix(vec3(1.0), vec3(0.0), smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'linear-aa',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = abs(abs(length(uv) - 0.6) - 0.15) - 0.04;
+  float k = clamp(0.5 - d / 0.02, 0.0, 1.0);
+  fragColor = vec4(k, k, k, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'zoom'],
+      wrong: [
+        { label: 'one-band', edits: [['    d = abs(d) - 0.04;\n', '']] },
+        { label: 'disc', edits: [['    d = abs(d) - 0.15;\n', ''], ['    d = abs(d) - 0.04;\n', '']] },
+        { label: 'fat', edits: [['abs(d) - 0.04', 'abs(d) - 0.12']] },
+        { label: 'square', edits: [['length(uv)', 'max(abs(uv.x), abs(uv.y))']] },
+      ],
+      injectMild: injectFrom(almost, 'radius-up', 'thicker'),
+      injectBorderline: [
+        { label: 'inject-wide-spread', edits: [['abs(d) - 0.15', 'abs(d) - 0.2']] },
+        { label: 'inject-big', edits: [['length(uv) - 0.6', 'length(uv) - 0.66']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── glow (intermediate, track 3, colored background) ────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'falloff-up', edits: [['exp(-5.0', 'exp(-5.3']] },
+      { label: 'falloff-down', edits: [['exp(-5.0', 'exp(-4.7']] },
+      { label: 'radius-up', edits: [['length(uv) - 0.3', 'length(uv) - 0.31']] },
+      { label: 'radius-down', edits: [['length(uv) - 0.3', 'length(uv) - 0.29']] },
+      { label: 'bg-lift', edits: [['vec3(0.02, 0.02, 0.08)', 'vec3(0.04, 0.04, 0.1)']] },
+      { label: 'warmer', edits: [['vec3(1.0, 0.55, 0.15)', 'vec3(1.0, 0.5, 0.12)']] },
+      { label: 'brighter', edits: [['glow * 0.9', 'glow * 0.95']] },
+      { label: 'dimmer', edits: [['glow * 0.9', 'glow * 0.85']] },
+      { label: 'soft-edge', edits: [['smoothstep(-0.01, 0.01, d)', 'smoothstep(-0.03, 0.03, d)']] },
+      { label: 'shift-x', edits: [['length(uv)', 'length(uv - vec2(0.02, 0.0))']] },
+    ];
+    return {
+      slug: 'glow',
+      others: ['circle-sdf', 'radial-gradient', 'vignette', 'polar-pattern'],
+      renames: { uv: 'p', d: 'dist', glow: 'halo', bg: 'night', color: 'col', mask: 'inside' },
+      handCorrect: [
+        {
+          label: 'premultiplied',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = length(uv) - 0.3;
+  vec3 col = vec3(0.02, 0.02, 0.08) + vec3(0.9, 0.495, 0.135) * exp(-5.0 * max(d, 0.0));
+  col = mix(col, vec3(1.0), 1.0 - smoothstep(-0.01, 0.01, d));
+  fragColor = vec4(col, 1.0);
+}
+`,
+        },
+        {
+          label: 'halo-helper',
+          src: `${HEADER}
+const vec3 NIGHT = vec3(0.02, 0.02, 0.08);
+const vec3 ORANGE = vec3(1.0, 0.55, 0.15);
+
+vec3 halo(float d) {
+  return ORANGE * 0.9 * exp(-5.0 * max(d, 0.0));
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float d = length(uv) - 0.3;
+  vec3 col = NIGHT + halo(d);
+  fragColor = vec4(mix(col, vec3(1.0), 1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'branch-outside',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = length(uv) - 0.3;
+  float g = d > 0.0 ? exp(-5.0 * d) : 1.0;
+  vec3 col = vec3(0.02, 0.02, 0.08) + vec3(1.0, 0.55, 0.15) * (0.9 * g);
+  float m = 1.0 - smoothstep(-0.01, 0.01, d);
+  fragColor = vec4(col * (1.0 - m) + m, 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5 * u_resolution;
+  p /= 0.5 * min(u_resolution.x, u_resolution.y);
+  float d = distance(p, vec2(0.0)) - 0.3;
+  float glow = exp(-5.0 * max(d, 0.0)) * 0.9;
+  vec3 col = vec3(0.02, 0.02, 0.08) + glow * vec3(1.0, 0.55, 0.15);
+  col = mix(col, vec3(1.0), 1.0 - smoothstep(-0.01, 0.01, d));
+  fragColor = vec4(col, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'bgr', 'zoom'],
+      wrong: [
+        {
+          label: 'no-glow',
+          edits: [['vec3 color = bg + vec3(1.0, 0.55, 0.15) * glow * 0.9;', 'vec3 color = bg;']],
+        },
+        { label: 'wide-glow', edits: [['exp(-5.0', 'exp(-1.5']] },
+        { label: 'red-bg', edits: [['vec3(0.02, 0.02, 0.08)', 'vec3(0.35, 0.05, 0.05)']] },
+      ],
+      injectMild: injectFrom(almost, 'falloff-up', 'brighter'),
+      injectBorderline: [
+        { label: 'inject-tight-glow', edits: [['exp(-5.0', 'exp(-8.0']] },
+        { label: 'inject-big-disc', edits: [['length(uv) - 0.3', 'length(uv) - 0.36']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── heart (intermediate, track 2) ───────────────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      {
+        label: 'bigger',
+        edits: [
+          ['1.41421356 - 0.4;', '1.41421356 - 0.42;'],
+          ['vec2(0.283, 0.283)) - 0.4;', 'vec2(0.283, 0.283)) - 0.42;'],
+        ],
+      },
+      {
+        label: 'smaller',
+        edits: [
+          ['1.41421356 - 0.4;', '1.41421356 - 0.38;'],
+          ['vec2(0.283, 0.283)) - 0.4;', 'vec2(0.283, 0.283)) - 0.38;'],
+        ],
+      },
+      { label: 'shift-up', edits: [['vec2(0.0, 0.06)', 'vec2(0.0, 0.04)']] },
+      { label: 'shift-x', edits: [['vec2(0.0, 0.06)', 'vec2(0.02, 0.06)']] },
+      { label: 'lobe-out', edits: [['vec2(0.283, 0.283)', 'vec2(0.293, 0.283)']] },
+      { label: 'lobe-up', edits: [['vec2(0.283, 0.283)', 'vec2(0.283, 0.293)']] },
+      { label: 'soft-edge', edits: [['smoothstep(-0.01, 0.01, d)', 'smoothstep(-0.03, 0.03, d)']] },
+      { label: 'hard-edge', edits: [['1.0 - smoothstep(-0.01, 0.01, d)', '1.0 - step(0.0, d)']] },
+      { label: 'dim', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * 0.92, 1.0)']] },
+      { label: 'grey-bg', edits: [['vec4(vec3(mask), 1.0)', 'vec4(mix(vec3(0.04), vec3(1.0), mask), 1.0)']] },
+    ];
+    return {
+      slug: 'heart',
+      others: ['triangle', 'star', 'box-sdf', 'ring'],
+      renames: { uv: 'st', p: 'q', square: 'diamond', lobe: 'bump', mask: 'inside' },
+      handCorrect: [
+        {
+          label: 'heart-helper',
+          src: `${HEADER}
+float sdHeart(vec2 p) {
+  p.x = abs(p.x);
+  float square = (p.x + abs(p.y)) / 1.41421356 - 0.4;
+  float lobe = length(p - vec2(0.283, 0.283)) - 0.4;
+  return min(square, lobe);
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = sdHeart(uv + vec2(0.0, 0.06));
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'rotated-square',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = vec2(abs(uv.x), uv.y + 0.06);
+  vec2 r = vec2(p.x + p.y, p.y - p.x) * 0.70710678;
+  float square = max(abs(r.x), abs(r.y)) - 0.4;
+  float lobe = distance(p, vec2(0.283, 0.283)) - 0.4;
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, min(square, lobe))), 1.0);
+}
+`,
+        },
+        {
+          label: 'two-lobes',
+          src: `${HEADER}
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5 * u_resolution;
+  p /= 0.5 * min(u_resolution.x, u_resolution.y);
+  p.y += 0.06;
+  float square = (abs(p.x) + abs(p.y)) * 0.70710678 - 0.4;
+  float left = length(p - vec2(-0.283, 0.283)) - 0.4;
+  float right = length(p - vec2(0.283, 0.283)) - 0.4;
+  float d = min(square, min(left, right));
+  fragColor = vec4(mix(vec3(1.0), vec3(0.0), smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'linear-aa',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 p = uv + vec2(0.0, 0.06);
+  p.x = abs(p.x);
+  float d = min((p.x + abs(p.y)) / 1.41421356 - 0.4, length(p - vec2(0.283, 0.283)) - 0.4);
+  float k = clamp(0.5 - d / 0.02, 0.0, 1.0);
+  fragColor = vec4(k, k, k, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'flip-y', 'zoom'],
+      wrong: [
+        { label: 'no-lobes', edits: [['float d = min(square, lobe);', 'float d = square;']] },
+        { label: 'lobes-only', edits: [['float d = min(square, lobe);', 'float d = lobe;']] },
+        { label: 'circle', edits: [['float d = min(square, lobe);', 'float d = length(uv) - 0.5;']] },
+      ],
+      injectMild: injectFrom(almost, 'bigger', 'shift-up'),
+      injectBorderline: [
+        {
+          label: 'inject-big',
+          edits: [
+            ['1.41421356 - 0.4;', '1.41421356 - 0.47;'],
+            ['vec2(0.283, 0.283)) - 0.4;', 'vec2(0.283, 0.283)) - 0.47;'],
+          ],
+        },
+        { label: 'inject-low', edits: [['vec2(0.0, 0.06)', 'vec2(0.0, 0.16)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── crescent-moon (intermediate, track 2) ───────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'moon-up', edits: [['length(uv) - 0.65', 'length(uv) - 0.67']] },
+      { label: 'moon-down', edits: [['length(uv) - 0.65', 'length(uv) - 0.63']] },
+      { label: 'cut-up', edits: [['vec2(0.3, 0.12)) - 0.55', 'vec2(0.3, 0.12)) - 0.57']] },
+      { label: 'cut-down', edits: [['vec2(0.3, 0.12)) - 0.55', 'vec2(0.3, 0.12)) - 0.53']] },
+      { label: 'cut-shift', edits: [['vec2(0.3, 0.12)', 'vec2(0.32, 0.12)']] },
+      { label: 'cut-tilt', edits: [['vec2(0.3, 0.12)', 'vec2(0.3, 0.14)']] },
+      { label: 'soft-edge', edits: [['smoothstep(-0.01, 0.01, d)', 'smoothstep(-0.03, 0.03, d)']] },
+      { label: 'hard-edge', edits: [['1.0 - smoothstep(-0.01, 0.01, d)', '1.0 - step(0.0, d)']] },
+      { label: 'dim', edits: [['vec4(vec3(mask), 1.0)', 'vec4(vec3(mask) * 0.92, 1.0)']] },
+      { label: 'grey-bg', edits: [['vec4(vec3(mask), 1.0)', 'vec4(mix(vec3(0.04), vec3(1.0), mask), 1.0)']] },
+    ];
+    return {
+      slug: 'crescent-moon',
+      others: ['ring', 'star', 'hexagon', 'line-segment'],
+      renames: { uv: 'p', moon: 'disc', cut: 'shadow', d: 'dist', mask: 'inside' },
+      handCorrect: [
+        {
+          label: 'circle-helper',
+          src: `${HEADER}
+float sdCircle(vec2 p, vec2 c, float r) {
+  return length(p - c) - r;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = max(sdCircle(uv, vec2(0.0), 0.65), -sdCircle(uv, vec2(0.3, 0.12), 0.55));
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'outside-cut',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float inMoon = length(uv) - 0.65;
+  float outCut = 0.55 - distance(uv, vec2(0.3, 0.12));
+  float d = max(inMoon, outCut);
+  fragColor = vec4(vec3(1.0 - smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5 * u_resolution;
+  p /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec2 c = p - vec2(0.3, 0.12);
+  float d = max(sqrt(dot(p, p)) - 0.65, 0.55 - sqrt(dot(c, c)));
+  fragColor = vec4(mix(vec3(1.0), vec3(0.0), smoothstep(-0.01, 0.01, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'linear-aa',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = max(length(uv) - 0.65, -(length(uv - vec2(0.3, 0.12)) - 0.55));
+  float k = clamp(0.5 - d / 0.02, 0.0, 1.0);
+  fragColor = vec4(k, k, k, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'mirror-x', 'zoom'],
+      wrong: [
+        { label: 'full-moon', edits: [['max(moon, -cut)', 'moon']] },
+        { label: 'intersect', edits: [['max(moon, -cut)', 'max(moon, cut)']] },
+        { label: 'half', edits: [['max(moon, -cut)', 'max(moon, uv.x)']] },
+      ],
+      injectMild: injectFrom(almost, 'moon-up', 'cut-shift'),
+      injectBorderline: [
+        { label: 'inject-small-cut', edits: [['vec2(0.3, 0.12)) - 0.55', 'vec2(0.3, 0.12)) - 0.45']] },
+        { label: 'inject-big-shift', edits: [['vec2(0.3, 0.12)', 'vec2(0.4, 0.12)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── stripes (beginner, track 4, colored) ────────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'cream-shift', edits: [['vec3(0.96, 0.92, 0.82)', 'vec3(0.95, 0.9, 0.8)']] },
+      { label: 'cream-white', edits: [['vec3(0.96, 0.92, 0.82)', 'vec3(0.98, 0.95, 0.88)']] },
+      { label: 'navy-lift', edits: [['vec3(0.1, 0.13, 0.25)', 'vec3(0.12, 0.15, 0.27)']] },
+      { label: 'navy-blue', edits: [['vec3(0.1, 0.13, 0.25)', 'vec3(0.08, 0.12, 0.3)']] },
+      { label: 'duty-up', edits: [['step(0.5, t)', 'step(0.52, t)']] },
+      { label: 'duty-down', edits: [['step(0.5, t)', 'step(0.48, t)']] },
+      { label: 'pixel-shift', edits: [['gl_FragCoord.xy / u_resolution.xy', '(gl_FragCoord.xy + 1.0) / u_resolution.xy']] },
+      { label: 'soft-edge', edits: [['step(0.5, t)', 'smoothstep(0.49, 0.51, t)']] },
+      { label: 'dim', edits: [['vec4(color, 1.0)', 'vec4(color * 0.96, 1.0)']] },
+      { label: 'warm', edits: [['vec4(color, 1.0)', 'vec4(color * vec3(1.0, 0.98, 0.95), 1.0)']] },
+    ];
+    return {
+      slug: 'stripes',
+      others: ['checkerboard', 'split-decision', 'staircase', 'polka-dots'],
+      renames: { uv: 'st', cream: 'light', navy: 'dark', t: 'phase', color: 'col' },
+      handCorrect: [
+        {
+          label: 'mod-ternary',
+          src: `${HEADER}
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  bool light = mod(uv.x * 6.0, 1.0) < 0.5;
+  fragColor = vec4(light ? vec3(0.96, 0.92, 0.82) : vec3(0.1, 0.13, 0.25), 1.0);
+}
+`,
+        },
+        {
+          label: 'floor-parity',
+          src: `${HEADER}
+const vec3 CREAM = vec3(0.96, 0.92, 0.82);
+const vec3 NAVY = vec3(0.1, 0.13, 0.25);
+
+void main() {
+  float band = mod(floor(gl_FragCoord.x / u_resolution.x * 12.0), 2.0);
+  fragColor = vec4(mix(CREAM, NAVY, band), 1.0);
+}
+`,
+        },
+        {
+          label: 'pixel-period',
+          src: `${HEADER}
+void main() {
+  float period = u_resolution.x / 6.0;
+  float t = mod(gl_FragCoord.x, period) / period;
+  vec3 col = vec3(0.96, 0.92, 0.82);
+  if (t >= 0.5) col = vec3(0.1, 0.13, 0.25);
+  fragColor = vec4(col, 1.0);
+}
+`,
+        },
+        {
+          label: 'stripe-helper',
+          src: `${HEADER}
+vec3 stripe(float x) {
+  float t = fract(x * 6.0);
+  return t < 0.5 ? vec3(0.96, 0.92, 0.82) : vec3(0.1, 0.13, 0.25);
+}
+
+void main() {
+  fragColor = vec4(stripe(gl_FragCoord.x / u_resolution.x), 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'bgr', 'zoom'],
+      wrong: [
+        { label: 'horizontal', edits: [['fract(uv.x * 6.0)', 'fract(uv.y * 6.0)']] },
+        { label: 'swapped', edits: [['mix(cream, navy', 'mix(navy, cream']] },
+        { label: 'red', edits: [['vec3(0.1, 0.13, 0.25)', 'vec3(0.8, 0.15, 0.15)']] },
+      ],
+      injectMild: injectFrom(almost, 'navy-lift', 'duty-up'),
+      injectBorderline: [
+        { label: 'inject-thick-navy', edits: [['step(0.5, t)', 'step(0.4, t)']] },
+        { label: 'inject-grey', edits: [['vec3(0.96, 0.92, 0.82)', 'vec3(0.8, 0.8, 0.8)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── polka-dots (intermediate, track 4, colored) ─────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'radius-up', edits: [['length(cell) - 0.3', 'length(cell) - 0.31']] },
+      { label: 'radius-down', edits: [['length(cell) - 0.3', 'length(cell) - 0.29']] },
+      { label: 'coral-shift', edits: [['vec3(0.95, 0.4, 0.35)', 'vec3(0.93, 0.42, 0.35)']] },
+      { label: 'coral-pink', edits: [['vec3(0.95, 0.4, 0.35)', 'vec3(0.95, 0.38, 0.4)']] },
+      { label: 'cream-white', edits: [['vec3(0.96, 0.92, 0.82)', 'vec3(0.98, 0.95, 0.88)']] },
+      { label: 'soft-edge', edits: [['smoothstep(-0.02, 0.02, d)', 'smoothstep(-0.04, 0.04, d)']] },
+      { label: 'hard-edge', edits: [['1.0 - smoothstep(-0.02, 0.02, d)', '1.0 - step(0.0, d)']] },
+      { label: 'shift', edits: [['fract(uv * 2.0)', 'fract(uv * 2.0 + 0.02)']] },
+      { label: 'dim', edits: [['vec4(mix(cream, coral, mask), 1.0)', 'vec4(mix(cream, coral, mask) * 0.96, 1.0)']] },
+      { label: 'oval', edits: [['length(cell)', 'length(cell * vec2(1.03, 1.0))']] },
+    ];
+    return {
+      slug: 'polka-dots',
+      others: ['stripes', 'checkerboard', 'circle-sdf', 'hsv-color-wheel'],
+      renames: { uv: 'p', cell: 'tile', d: 'dist', mask: 'spot', cream: 'paper', coral: 'ink' },
+      handCorrect: [
+        {
+          label: 'mod-cells',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 cell = mod(uv * 2.0, 1.0) - 0.5;
+  float mask = 1.0 - smoothstep(-0.02, 0.02, length(cell) - 0.3);
+  fragColor = vec4(mix(vec3(0.96, 0.92, 0.82), vec3(0.95, 0.4, 0.35), mask), 1.0);
+}
+`,
+        },
+        {
+          label: 'pixel-cells',
+          src: `${HEADER}
+void main() {
+  float cellPx = min(u_resolution.x, u_resolution.y) * 0.25;
+  vec2 cell = fract((gl_FragCoord.xy - 0.5 * u_resolution) / cellPx) - 0.5;
+  float mask = 1.0 - smoothstep(-0.02, 0.02, length(cell) - 0.3);
+  fragColor = vec4(mix(vec3(0.96, 0.92, 0.82), vec3(0.95, 0.4, 0.35), mask), 1.0);
+}
+`,
+        },
+        {
+          label: 'dot-helper',
+          src: `${HEADER}
+const vec3 CREAM = vec3(0.96, 0.92, 0.82);
+const vec3 CORAL = vec3(0.95, 0.4, 0.35);
+
+float dotMask(vec2 p) {
+  vec2 q = fract(p) - 0.5;
+  return 1.0 - smoothstep(-0.02, 0.02, length(q) - 0.3);
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  fragColor = vec4(mix(CREAM, CORAL, dotMask(uv * 2.0)), 1.0);
+}
+`,
+        },
+        {
+          label: 'distance-fn',
+          src: `${HEADER}
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = distance(fract(uv * 2.0), vec2(0.5)) - 0.3;
+  float m = 1.0 - smoothstep(-0.02, 0.02, d);
+  vec3 col = vec3(0.96, 0.92, 0.82) * (1.0 - m) + vec3(0.95, 0.4, 0.35) * m;
+  fragColor = vec4(col, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['inverted', 'bgr', 'zoom'],
+      wrong: [
+        { label: 'swapped', edits: [['mix(cream, coral', 'mix(coral, cream']] },
+        { label: 'big-dots', edits: [['length(cell) - 0.3', 'length(cell) - 0.45']] },
+        { label: 'dense', edits: [['fract(uv * 2.0)', 'fract(uv * 3.0)']] },
+      ],
+      injectMild: injectFrom(almost, 'radius-up', 'coral-shift'),
+      injectBorderline: [
+        { label: 'inject-big', edits: [['length(cell) - 0.3', 'length(cell) - 0.36']] },
+        { label: 'inject-shift', edits: [['fract(uv * 2.0)', 'fract(uv * 2.0 + 0.08)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
 ];
 
 /** Injection payloads. Comments and a string-like #define, never executable. */

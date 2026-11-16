@@ -1,0 +1,10 @@
+{
+  "id": "polka-dots",
+  "slug": "polka-dots",
+  "title": "Polka Dots",
+  "description": "Fill the canvas with a grid of coral (0.95, 0.4, 0.35) dots on cream (0.96, 0.92, 0.82). The grid has 4 cells across the canvas, so each cell is 0.5 wide in the -1 to 1 space. A dot sits in the middle of each cell and has radius 0.3 of the cell's size. Dot edges are smooth.",
+  "difficulty": "intermediate",
+  "track": "patterns",
+  "tolerance": 50,
+  "useBlur": false
+}

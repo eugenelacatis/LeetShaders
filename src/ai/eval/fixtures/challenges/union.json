@@ -1,0 +1,10 @@
+{
+  "id": "union",
+  "slug": "union",
+  "title": "Double Bubble",
+  "description": "Draw two white circles on a black background that overlap and merge into one shape. Both have radius 0.4. One is centered at (-0.3, 0.0) and the other at (0.3, 0.0). The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "beginner",
+  "track": "combining",
+  "tolerance": 50,
+  "useBlur": false
+}

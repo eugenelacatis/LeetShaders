@@ -1,0 +1,10 @@
+{
+  "id": "glow",
+  "slug": "glow",
+  "title": "Neon Halo",
+  "description": "Draw a white disc of radius 0.3 at the center, with an orange glow around it, on a dark navy background (0.02, 0.02, 0.08). The glow is the color (1.0, 0.55, 0.15). Its strength starts at 0.9 at the disc's edge and falls off as exp(-5 * distance). The disc covers the glow. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "intermediate",
+  "track": "combining",
+  "tolerance": 50,
+  "useBlur": false
+}
