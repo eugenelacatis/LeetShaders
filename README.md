@@ -2,6 +2,8 @@
 
 A browser-native GLSL shader coding challenge platform with a hybrid AI-powered judging system.
 
+Live at [leetshaders.vercel.app](https://leetshaders.vercel.app/).
+
 ## Overview
 
 LeetShaders is "LeetCode for shaders". You write a GLSL fragment shader in a Monaco editor, watch it render live next to the reference, and submit it to a judge that compares the two images.
@@ -68,8 +70,6 @@ npx tsx src/ai/eval/run.ts --mae-only --set=tuning
 
 `--live` adds the LLM calls; it prints a cost estimate first and stops at `--max-cost` (default $5).
 
-## Deploying your own
+## Forking
 
-1. Create a Supabase project and apply every file in `supabase/migrations/` in order, either in the SQL editor or with `supabase db push`.
-2. Put `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`, then `npm run seed` to load the challenges. Run it again after you change a challenge.
-3. Import the repo into Vercel and set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `ANTHROPIC_API_KEY` as environment variables. Do not add the service-role key to Vercel.
+To run your own copy, create a Supabase project, apply `supabase/migrations/` in order, and put `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`. Then run `npm run seed`. On Vercel, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `ANTHROPIC_API_KEY`, and leave the service-role key out.
