@@ -1,0 +1,11 @@
+{
+  "id": "3c95b7de-28ef-4774-85d5-35db82253929",
+  "slug": "stripes",
+  "title": "Pinstripe",
+  "description": "Fill the canvas with six pairs of vertical stripes. The stripes alternate between cream (0.96, 0.92, 0.82) and navy (0.1, 0.13, 0.25). Each pair is the same width, and the left edge starts with cream. Edges are hard cuts. The canvas runs from 0 to 1 in x.",
+  "difficulty": "beginner",
+  "track": "patterns",
+  "tolerance": 50,
+  "useBlur": false,
+  "hintText": "fract() wraps a number back into 0 to 1. Multiply uv.x by 6.0 first, then fract() gives you six repeats. step(0.5, ...) turns each repeat into two halves."
+}

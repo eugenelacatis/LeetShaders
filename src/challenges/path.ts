@@ -22,7 +22,18 @@ export const PATH_ORDER: readonly string[] = [
   'triangle',
   'hexagon',
   'star',
+  'heart',
+  'crescent-moon',
+  // combining
+  'union',
+  'intersection',
+  'subtraction',
+  'smooth-union',
+  'onion-rings',
+  'glow',
   // patterns
+  'stripes',
+  'polka-dots',
   'checkerboard',
   'polar-pattern',
   // raymarching

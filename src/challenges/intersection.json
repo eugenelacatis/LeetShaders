@@ -1,0 +1,11 @@
+{
+  "id": "5a423a57-d7ec-4a72-b566-b79fd6401025",
+  "slug": "intersection",
+  "title": "Lens",
+  "description": "Draw the area where two circles overlap as white on a black background. Both circles have radius 0.55. One is centered at (-0.25, 0.0) and the other at (0.25, 0.0). Only the lens-shaped overlap is white. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "beginner",
+  "track": "combining",
+  "tolerance": 50,
+  "useBlur": false,
+  "hintText": "Build each circle's distance, length(uv - center) - radius. A point is in the overlap only if it is inside both, so keep the larger of the two distances with max()."
+}

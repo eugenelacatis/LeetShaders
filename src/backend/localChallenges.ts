@@ -57,6 +57,36 @@ import hexagonGlsl from '../challenges/hexagon.glsl?raw';
 import starJson from '../challenges/star.json';
 import starGlsl from '../challenges/star.glsl?raw';
 
+import unionJson from '../challenges/union.json';
+import unionGlsl from '../challenges/union.glsl?raw';
+
+import intersectionJson from '../challenges/intersection.json';
+import intersectionGlsl from '../challenges/intersection.glsl?raw';
+
+import subtractionJson from '../challenges/subtraction.json';
+import subtractionGlsl from '../challenges/subtraction.glsl?raw';
+
+import smoothUnionJson from '../challenges/smooth-union.json';
+import smoothUnionGlsl from '../challenges/smooth-union.glsl?raw';
+
+import onionRingsJson from '../challenges/onion-rings.json';
+import onionRingsGlsl from '../challenges/onion-rings.glsl?raw';
+
+import glowJson from '../challenges/glow.json';
+import glowGlsl from '../challenges/glow.glsl?raw';
+
+import heartJson from '../challenges/heart.json';
+import heartGlsl from '../challenges/heart.glsl?raw';
+
+import crescentMoonJson from '../challenges/crescent-moon.json';
+import crescentMoonGlsl from '../challenges/crescent-moon.glsl?raw';
+
+import stripesJson from '../challenges/stripes.json';
+import stripesGlsl from '../challenges/stripes.glsl?raw';
+
+import polkaDotsJson from '../challenges/polka-dots.json';
+import polkaDotsGlsl from '../challenges/polka-dots.glsl?raw';
+
 // Optional per-challenge starters: `<slug>.starter.glsl` next to the challenge files.
 const starters = import.meta.glob('../challenges/*.starter.glsl', {
   query: '?raw',
@@ -89,6 +119,16 @@ const files: ChallengeFile[] = [
   { meta: triangleJson, glsl: triangleGlsl },
   { meta: hexagonJson, glsl: hexagonGlsl },
   { meta: starJson, glsl: starGlsl },
+  { meta: unionJson, glsl: unionGlsl },
+  { meta: intersectionJson, glsl: intersectionGlsl },
+  { meta: subtractionJson, glsl: subtractionGlsl },
+  { meta: smoothUnionJson, glsl: smoothUnionGlsl },
+  { meta: onionRingsJson, glsl: onionRingsGlsl },
+  { meta: glowJson, glsl: glowGlsl },
+  { meta: heartJson, glsl: heartGlsl },
+  { meta: crescentMoonJson, glsl: crescentMoonGlsl },
+  { meta: stripesJson, glsl: stripesGlsl },
+  { meta: polkaDotsJson, glsl: polkaDotsGlsl },
 ];
 
 function toChallenge(meta: Record<string, unknown>, glsl: string): Challenge {

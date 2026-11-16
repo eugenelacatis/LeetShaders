@@ -1,0 +1,11 @@
+{
+  "id": "ac194d48-696a-4537-b09e-2cbe02ebdf83",
+  "slug": "subtraction",
+  "title": "Bite Mark",
+  "description": "Draw a white disc with a circular bite taken out of its right side, on a black background. The disc has radius 0.6 and is centered. The bite is a circle of radius 0.4 centered at (0.4, 0.0). Everything inside the bite is black. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "beginner",
+  "track": "combining",
+  "tolerance": 50,
+  "useBlur": false,
+  "hintText": "Flipping a distance's sign turns inside into outside. To cut the second circle out of the first, take max() of the first distance and the negated second distance."
+}

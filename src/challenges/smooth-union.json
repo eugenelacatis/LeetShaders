@@ -1,0 +1,11 @@
+{
+  "id": "2c0a0777-9774-4d2e-94b8-f02d655d0d74",
+  "slug": "smooth-union",
+  "title": "Melting Pair",
+  "description": "Draw two white circles that melt into each other with a smooth neck, on a black background. Both have radius 0.35. One is centered at (-0.35, 0.0) and the other at (0.35, 0.0). Join them with a polynomial smooth minimum with a blend width of 0.3. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "intermediate",
+  "track": "combining",
+  "tolerance": 50,
+  "useBlur": false,
+  "hintText": "A plain min() leaves a sharp crease where the shapes meet. A smooth minimum with width k is: h = max(k - abs(a - b), 0.0) / k, then min(a, b) - h * h * k * 0.25."
+}

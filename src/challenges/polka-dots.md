@@ -1,0 +1,25 @@
+# Challenge: Polka Dots
+
+## Intended Solution
+
+```glsl
+// Aspect-ratio corrected UVs, centered, -1 to 1
+vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+
+// Four cells across. fract() gives every cell its own 0 to 1 coordinates, minus 0.5 centers them
+vec2 cell = fract(uv * 2.0) - 0.5;
+
+// Circle at the middle of every cell, radius 0.3 of the cell
+float d = length(cell) - 0.3;
+float mask = 1.0 - smoothstep(-0.02, 0.02, d);
+
+vec3 cream = vec3(0.96, 0.92, 0.82);
+vec3 coral = vec3(0.95, 0.4, 0.35);
+
+fragColor = vec4(mix(cream, coral, mask), 1.0);
+```
+
+## Calibration Notes
+- **Tolerance:** provisional `50`. Run `npx tsx src/ai/eval/run.ts --mae-only --set=tuning` once fixtures exist and replace it.
+- **Source:** own code.
+- **Near misses:** Wrong cell count, dots too big (touching) or too small, or offset from the cell centers.

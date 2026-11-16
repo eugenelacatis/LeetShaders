@@ -1,0 +1,11 @@
+{
+  "id": "1288fcff-87c0-4001-96df-4dd42dd65dcd",
+  "slug": "polka-dots",
+  "title": "Polka Dots",
+  "description": "Fill the canvas with a grid of coral (0.95, 0.4, 0.35) dots on cream (0.96, 0.92, 0.82). The grid has 4 cells across the canvas, so each cell is 0.5 wide in the -1 to 1 space. A dot sits in the middle of each cell and has radius 0.3 of the cell's size. Dot edges are smooth.",
+  "difficulty": "intermediate",
+  "track": "patterns",
+  "tolerance": 50,
+  "useBlur": false,
+  "hintText": "Multiply uv by 4.0 to get four cells, then fract() gives each cell its own 0 to 1 coordinates. Subtract 0.5 to put the origin in the cell center, and draw a circle there."
+}
