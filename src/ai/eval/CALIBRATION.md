@@ -34,6 +34,16 @@ Every run saves the user render next to each fixture (`<fixture>.png`) and the r
 | hsv-color-wheel | intermediate | 33.1 (8) | no |
 | polar-pattern | intermediate | 43.4 (12) | yes |
 | raymarched-sphere | advanced | 5.7 (20) | yes |
+| split-decision | beginner | 18.7 (50) | no |
+| slant | beginner | 20.9 (50) | no |
+| staircase | beginner | 23.9 (50) | no |
+| vignette | intermediate | 55.9 (50) | no |
+| golden-hour | intermediate | 29.5 (50) | no |
+| ring | beginner | 56.4 (50) | no |
+| line-segment | beginner | 34.4 (50) | no |
+| triangle | intermediate | 35 (50) | no |
+| hexagon | intermediate | 25.6 (50) | no |
+| star | intermediate | 39.1 (50) | no |
 
 | Category | Expected | What the fixtures are |
 | --- | --- | --- |

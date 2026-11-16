@@ -1,0 +1,10 @@
+{
+  "id": "vignette",
+  "slug": "vignette",
+  "title": "Vignette",
+  "description": "Paint the canvas warm cream (0.95, 0.85, 0.6) and darken it toward black at the edges. The center stays full brightness. The darkening starts 0.25 from the center and would reach black at 0.75, so the corners end up almost black and the edge midpoints stay fairly bright.",
+  "difficulty": "intermediate",
+  "track": "color",
+  "tolerance": 55.9,
+  "useBlur": false
+}

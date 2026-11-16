@@ -1,0 +1,10 @@
+{
+  "id": "golden-hour",
+  "slug": "golden-hour",
+  "title": "Golden Hour",
+  "description": "Paint a sunset sky in three stops, bottom to top: orange (0.98, 0.45, 0.1), pale gold (0.95, 0.75, 0.35) and dusk blue (0.25, 0.3, 0.6). Gold sits exactly halfway up, and each blend is smooth.",
+  "difficulty": "intermediate",
+  "track": "color",
+  "tolerance": 29.5,
+  "useBlur": false
+}

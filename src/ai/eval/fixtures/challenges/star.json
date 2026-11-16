@@ -1,0 +1,10 @@
+{
+  "id": "star",
+  "slug": "star",
+  "title": "Star",
+  "description": "Draw a white five-pointed star with one point straight up on a black background. The tips are 0.8 from the center and the inner corners are 0.32 from the center. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "intermediate",
+  "track": "shapes",
+  "tolerance": 39.1,
+  "useBlur": false
+}

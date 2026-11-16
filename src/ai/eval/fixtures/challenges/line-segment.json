@@ -1,0 +1,10 @@
+{
+  "id": "line-segment",
+  "slug": "line-segment",
+  "title": "Line Segment",
+  "description": "Draw a white line with rounded ends from (-0.6, -0.3) to (0.6, 0.3) on a black background. The line reaches 0.08 to each side of its path. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "beginner",
+  "track": "shapes",
+  "tolerance": 34.4,
+  "useBlur": false
+}

@@ -1,0 +1,10 @@
+{
+  "id": "split-decision",
+  "slug": "split-decision",
+  "title": "Split Decision",
+  "description": "Fill the left half of the canvas with crimson (0.9, 0.22, 0.27) and the right half with midnight navy (0.1, 0.13, 0.25). The edge between them is a hard cut at the middle, with no blending.",
+  "difficulty": "beginner",
+  "track": "color",
+  "tolerance": 18.7,
+  "useBlur": false
+}

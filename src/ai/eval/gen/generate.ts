@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { openHarness } from '../browserSession';
 import type { HarnessWindow } from '../harnessTypes';
 import { FIXTURES_DIR, VERDICTS } from '../fixtures';
-import { INJECTIONS, SPECS, type Edit } from './specs';
+import { INJECTIONS, SPECS, type Edit, type WrongTransform } from './specs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const CHALLENGES_SRC = join(REPO, 'src', 'challenges');
@@ -79,6 +79,21 @@ function timeBranch(ref: string, kind: 'time-eq' | 'mouse-eq' | 'time-gt'): stri
   return src.replace('  shade();\n}', `  shade();\n${tail}\n}`);
 }
 
+/** Whole-image wrong answers: a color post-process or a remap of gl_FragCoord. */
+function wrongTransform(ref: string, kind: WrongTransform): string {
+  if (kind === 'inverted' || kind === 'bgr') {
+    const tail = kind === 'inverted' ? 'fragColor.rgb = 1.0 - fragColor.rgb;' : 'fragColor.rgb = fragColor.bgr;';
+    return wrapHelper(ref).replace('  shade();\n}', `  shade();\n  ${tail}\n}`);
+  }
+  if (!ref.includes('gl_FragCoord.xy')) throw new Error(`${kind}: no gl_FragCoord.xy`);
+  const coord = {
+    'flip-y': 'vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y)',
+    'mirror-x': 'vec2(u_resolution.x - gl_FragCoord.x, gl_FragCoord.y)',
+    zoom: '(gl_FragCoord.xy * 2.0 - u_resolution.xy * 0.5)',
+  }[kind];
+  return ref.replaceAll('gl_FragCoord.xy', coord);
+}
+
 function colorTable(grid: number[], n: number): string {
   const entries: string[] = [];
   for (let i = 0; i < n * n; i++) {
@@ -120,6 +135,7 @@ async function clearGenerated(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  const started = performance.now();
   await clearGenerated();
   const refs = new Map<string, string>();
   for (const spec of SPECS) {
@@ -178,6 +194,7 @@ async function main(): Promise<void> {
 
       // wrong: 6 edits + 4 other challenges' references
       for (const e of spec.wrong) put('wrong', spec.slug, e.label, applyEdits(ref, e));
+      for (const kind of spec.genWrong ?? []) put('wrong', spec.slug, `gen-${kind}`, wrongTransform(ref, kind));
       for (const other of spec.others) {
         const otherSrc = refs.get(other);
         if (!otherSrc) throw new Error(`${spec.slug}: unknown other challenge ${other}`);
@@ -207,11 +224,20 @@ async function main(): Promise<void> {
     await session.close();
   }
 
+  for (const spec of SPECS) {
+    for (const v of VERDICTS) {
+      const n = [...files.keys()].filter((k) => k.startsWith(`${v}/${spec.slug}-`)).length;
+      if (n !== 10) throw new Error(`${spec.slug}/${v}: ${n} fixtures, expected 10`);
+    }
+  }
+
   for (const [rel, src] of files) await writeFile(join(FIXTURES_DIR, rel), src);
   for (const v of VERDICTS) {
     console.log(`${v}: ${[...files.keys()].filter((k) => k.startsWith(`${v}/`)).length}`);
   }
-  console.log(`Wrote ${files.size} fixtures for ${SPECS.length} challenges.`);
+  console.log(
+    `Wrote ${files.size} fixtures for ${SPECS.length} challenges in ${((performance.now() - started) / 1000).toFixed(1)}s.`,
+  );
 }
 
 main().catch((err) => {

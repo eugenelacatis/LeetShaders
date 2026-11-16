@@ -1,0 +1,10 @@
+{
+  "id": "staircase",
+  "slug": "staircase",
+  "title": "Staircase",
+  "description": "Draw five solid gray bands stacked from bottom to top. The bottom band is black, the top band is white, and the three between step up evenly. Each band has a hard edge, with no smooth blending.",
+  "difficulty": "beginner",
+  "track": "color",
+  "tolerance": 23.9,
+  "useBlur": false
+}

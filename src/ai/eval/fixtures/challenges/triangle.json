@@ -1,0 +1,10 @@
+{
+  "id": "triangle",
+  "slug": "triangle",
+  "title": "Triangle",
+  "description": "Draw a white equilateral triangle with one point up on a black background. Its center is the center of the canvas and every edge is 0.4 from that center. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "intermediate",
+  "track": "shapes",
+  "tolerance": 35,
+  "useBlur": false
+}
