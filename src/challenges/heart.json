@@ -5,7 +5,7 @@
   "description": "Draw a white heart on a black background, built from a square turned 45 degrees plus two circles. The square has half-side 0.4, so its corners reach 0.566 from the center. The circles have radius 0.4 and sit on the two upper edges, centered at (-0.283, 0.283) and (0.283, 0.283). Shift the whole heart down by 0.06 so it looks centered. The canvas runs from -1 to 1 in both directions.",
   "difficulty": "intermediate",
   "track": "shapes",
-  "tolerance": 50,
+  "tolerance": 40.4,
   "useBlur": false,
   "hintText": "Mirror the x axis with abs(uv.x) so you only build one half. The turned square is abs(x) + abs(y) divided by sqrt(2), minus the half-side. Add one circle on the right upper edge, then take the min() of the two shapes."
 }

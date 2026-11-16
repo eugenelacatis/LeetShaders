@@ -5,7 +5,7 @@
   "description": "Draw two thin concentric white rings on a black background. Layer the shape in two passes. The first pass turns a circle of radius 0.6 into a band that reaches 0.15 to each side. The second pass turns that band into two outlines, each reaching 0.04 to each side. The canvas runs from -1 to 1 in both directions.",
   "difficulty": "intermediate",
   "track": "combining",
-  "tolerance": 50,
+  "tolerance": 65.4,
   "useBlur": false,
   "hintText": "abs(d) - r wraps a shape's edge into an outline of half-width r. Do it once to get a ring, then do it again on the result to get two rings."
 }

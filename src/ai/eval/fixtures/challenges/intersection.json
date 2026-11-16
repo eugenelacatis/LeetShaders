@@ -5,6 +5,6 @@
   "description": "Draw the area where two circles overlap as white on a black background. Both circles have radius 0.55. One is centered at (-0.25, 0.0) and the other at (0.25, 0.0). Only the lens-shaped overlap is white. The canvas runs from -1 to 1 in both directions.",
   "difficulty": "beginner",
   "track": "combining",
-  "tolerance": 50,
+  "tolerance": 32.2,
   "useBlur": false
 }

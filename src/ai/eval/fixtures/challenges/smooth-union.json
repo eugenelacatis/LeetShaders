@@ -5,6 +5,6 @@
   "description": "Draw two white circles that melt into each other with a smooth neck, on a black background. Both have radius 0.35. One is centered at (-0.35, 0.0) and the other at (0.35, 0.0). Join them with a polynomial smooth minimum with a blend width of 0.3. The canvas runs from -1 to 1 in both directions.",
   "difficulty": "intermediate",
   "track": "combining",
-  "tolerance": 50,
+  "tolerance": 33.9,
   "useBlur": false
 }

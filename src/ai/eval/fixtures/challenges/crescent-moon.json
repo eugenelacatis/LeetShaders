@@ -5,6 +5,6 @@
   "description": "Draw a white crescent moon on a black background. Start with a disc of radius 0.65 centered on the canvas, and cut away a circle of radius 0.55 centered at (0.3, 0.12). What is left is the crescent, open toward the upper right. The canvas runs from -1 to 1 in both directions.",
   "difficulty": "intermediate",
   "track": "shapes",
-  "tolerance": 50,
+  "tolerance": 22.1,
   "useBlur": false
 }
