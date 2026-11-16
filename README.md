@@ -4,7 +4,15 @@ A browser-native GLSL shader coding challenge platform with a hybrid AI-powered 
 
 ## Overview
 
-LeetShaders is a platform where users can practice and master shader graphics programming. Think of it as "LeetCode for Shaders." It provides a real-time GLSL editor, a live preview, and a sophisticated judging system that validates your visual output against reference solutions.
+LeetShaders is "LeetCode for shaders". You write a GLSL fragment shader in a Monaco editor, watch it render live next to the reference, and submit it to a judge that compares the two images.
+
+This is a fork of an old class project. I wanted to expand upon it to fill the gap in graphics programming assessment.
+
+### Challenges
+
+The bank has 19 challenges (10 beginner, 8 intermediate, 1 advanced), each tagged with a track: color, shapes, combining, patterns, noise, raymarching, or capstone. The list page lays them out as a circuit board in path order, with a live thumbnail rendered through the shared pipeline for every key. The challenge page shows your render, the reference, and their difference, and a verdict sticker reports Matched, Not yet, or Not judged. Capstone challenges give a starter scene and ask you to fill in code cells. The landing page has a "how it works" section that explains the judge.
+
+Each challenge is a `.glsl` reference, a `.json` file with metadata and a calibrated tolerance, and a `.md` file with the intended solution. Reference shaders and the live preview run through one WebGL2 pipeline, so what you see is what the judge scores.
 
 ### The hybrid judge
 
@@ -18,7 +26,7 @@ LLM results are cached by challenge and shader hash, and the API key stays in a 
 
 ### Judge eval
 
-`src/ai/eval/` measures that exact pipeline in headless Chromium against 360 fixtures: correct, almost-correct, wrong, and adversarial shaders for each of the 9 challenges, split 270 tuning / 90 held out. Per-challenge tolerances and the routing bands are derived from the tuning set; the method and numbers are in [`src/ai/eval/CALIBRATION.md`](src/ai/eval/CALIBRATION.md).
+`src/ai/eval/` measures that exact pipeline in headless Chromium against 760 fixtures: correct, almost-correct, wrong, and adversarial shaders, 10 per category for each of the 19 challenges, split 570 tuning / 190 held out. Per-challenge tolerances and the routing bands are derived from the tuning set; the method and numbers are in [`src/ai/eval/CALIBRATION.md`](src/ai/eval/CALIBRATION.md).
 
 ## Tech Stack
 
@@ -32,10 +40,13 @@ LLM results are cached by challenge and shader hash, and the API key stays in a 
 ## Project Structure
 
 - `src/judge/`: WebGL2 rendering pipeline and scoring logic.
-- `src/editor/`: Monaco editor integration and GLSL syntax highlighting.
-- `src/ai/`: Prompt engineering and LLM evaluation harnesses.
-- `src/backend/`: Supabase integration and data hooks.
-- `src/challenges/`: Curated GLSL challenge bank.
+- `src/editor/`: Monaco integration, GLSL highlighting, the render stage, and capstone cells.
+- `src/pages/`: landing, how-it-works, challenge list, and challenge pages.
+- `src/ai/`: prompts, band logic, and the judge eval harness.
+- `src/backend/`: Supabase integration, seeding, and the local challenge loader.
+- `src/challenges/`: the GLSL challenge bank.
+- `api/`: the Vercel function that proxies Anthropic calls.
+- `supabase/migrations/`: database schema and changes.
 
 ## Running it
 
@@ -59,18 +70,6 @@ npx tsx src/ai/eval/run.ts --mae-only --set=tuning
 
 ## Deploying your own
 
-1. Create a Supabase project and run `supabase/migrations/20240504_initial_schema.sql` in its SQL editor.
-2. Put `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`, then `npm run seed` to load the challenges.
+1. Create a Supabase project and apply every file in `supabase/migrations/` in order, either in the SQL editor or with `supabase db push`.
+2. Put `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`, then `npm run seed` to load the challenges. Run it again after you change a challenge.
 3. Import the repo into Vercel and set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `ANTHROPIC_API_KEY` as environment variables. Do not add the service-role key to Vercel.
-
-## Team & Roles
-
-This project is organized into four key leadership roles:
-- **Judge & Rendering Lead:** WebGL pipeline and MAE scoring.
-- **AI Systems & Integration:** LLM judge prompts and hint systems.
-- **Editor & UI Lead:** Monaco integration and core user experience.
-- **Content & Backend Lead:** Challenge authoring and Supabase infrastructure.
-
----
-
-*This project is being developed as a CMPE Final Project.*
