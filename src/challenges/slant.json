@@ -1,0 +1,11 @@
+{
+  "id": "d34cb7ca-e0d6-4fd0-b6f1-d0c006ad1a70",
+  "slug": "slant",
+  "title": "Slant",
+  "description": "Blend from orange (1.0, 0.6, 0.1) at the bottom-left corner to magenta (0.8, 0.1, 0.6) at the top-right corner. The blend runs along the diagonal, so every point on a line from bottom-right to top-left has the same color.",
+  "difficulty": "beginner",
+  "track": "color",
+  "tolerance": 20.9,
+  "useBlur": false,
+  "hintText": "The blend amount is the average of uv.x and uv.y. Use it as the third argument of mix()."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "1186483d-2e3d-41b9-afeb-06f35ad55840",
+  "slug": "triangle",
+  "title": "Triangle",
+  "description": "Draw a white equilateral triangle with one point up on a black background. Its center is the center of the canvas and every edge is 0.4 from that center. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "intermediate",
+  "track": "shapes",
+  "tolerance": 35,
+  "useBlur": false,
+  "hintText": "Each edge is a half-plane. The distance from the center to an edge along its normal is 0.4, so the distance of a pixel past that edge is dot(uv, normal) - 0.4. The flat bottom has normal (0, -1). The other two normals point 30 degrees above horizontal: (0.866, 0.5) and (-0.866, 0.5). Inside the triangle all three distances are negative, so the shape's distance is their max()."
+}

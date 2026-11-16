@@ -1,0 +1,11 @@
+{
+  "id": "86770a73-7a71-46b6-89a7-1f6486c06c5e",
+  "slug": "line-segment",
+  "title": "Line Segment",
+  "description": "Draw a white line with rounded ends from (-0.6, -0.3) to (0.6, 0.3) on a black background. The line reaches 0.08 to each side of its path. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "beginner",
+  "track": "shapes",
+  "tolerance": 34.4,
+  "useBlur": false,
+  "hintText": "Project the pixel onto the line with dot(pa, ba) / dot(ba, ba), where pa is the pixel minus the start and ba is the end minus the start. clamp() that to 0 to 1 so the projection stays on the segment. The distance to the segment is length(pa - ba * h). Subtract 0.08 for the thickness."
+}

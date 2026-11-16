@@ -1,0 +1,11 @@
+{
+  "id": "6f22e750-37a9-4bc9-8bf6-697dadace4c7",
+  "slug": "ring",
+  "title": "Ring",
+  "description": "Draw a white ring on a black background. It is centered, with its middle at radius 0.55 from the center of the canvas, and it reaches 0.12 to each side of that, so the band is 0.24 wide. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "beginner",
+  "track": "shapes",
+  "tolerance": 56.4,
+  "useBlur": false,
+  "hintText": "Start with the circle distance length(uv) - 0.55. Taking abs() of it folds the inside and the outside together, so it becomes distance from the circle's edge. Subtract the half-width 0.12 to thicken that into a band."
+}

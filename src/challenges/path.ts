@@ -6,12 +6,22 @@ import type { Challenge } from '../judge/types';
 export const PATH_ORDER: readonly string[] = [
   // color
   'solid-color',
+  'split-decision',
   'uv-gradient',
+  'slant',
+  'staircase',
   'radial-gradient',
+  'vignette',
+  'golden-hour',
   'hsv-color-wheel',
   // shapes
   'circle-sdf',
+  'ring',
   'box-sdf',
+  'line-segment',
+  'triangle',
+  'hexagon',
+  'star',
   // patterns
   'checkerboard',
   'polar-pattern',

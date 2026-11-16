@@ -1,0 +1,11 @@
+{
+  "id": "f56f244a-434e-4e0c-9794-a3a7e6764620",
+  "slug": "hexagon",
+  "title": "Hexagon",
+  "description": "Draw a white regular hexagon with a flat top and bottom on a black background. Its center is the center of the canvas and every edge is 0.5 from that center. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "intermediate",
+  "track": "shapes",
+  "tolerance": 25.6,
+  "useBlur": false,
+  "hintText": "A hexagon has three pairs of parallel edges. Use the three directions (1, 0), (0.5, 0.866) and (-0.5, 0.866). abs(dot(uv, direction)) is the distance to both edges of a pair at once. The shape's distance is the max() of the three, minus 0.5."
+}
