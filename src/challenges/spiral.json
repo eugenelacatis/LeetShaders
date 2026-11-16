@@ -1,0 +1,11 @@
+{
+  "id": "1d38fd3f-c687-4fb2-80fb-d3c30936990c",
+  "slug": "spiral",
+  "title": "Whirlpool",
+  "description": "Draw a spiral: pink (1.0, 0.45, 0.7) and plum (0.2, 0.05, 0.3) arms winding out from the center. Take v = length(uv) * 3.0 - atan(uv.y, uv.x) / 6.2831853, then switch bands where abs(fract(v) - 0.5) crosses 0.25, with a smoothstep from 0.24 to 0.26. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "intermediate",
+  "track": "patterns",
+  "tolerance": 50,
+  "useBlur": false,
+  "hintText": "A spiral is rings whose radius depends on the angle. Start from fract(length(uv) * 3.0), then subtract atan(uv.y, uv.x) / 6.2831853 so every full turn shifts the pattern by one ring."
+}

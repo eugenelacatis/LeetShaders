@@ -87,6 +87,36 @@ import stripesGlsl from '../challenges/stripes.glsl?raw';
 import polkaDotsJson from '../challenges/polka-dots.json';
 import polkaDotsGlsl from '../challenges/polka-dots.glsl?raw';
 
+import outlinedShapeJson from '../challenges/outlined-shape.json';
+import outlinedShapeGlsl from '../challenges/outlined-shape.glsl?raw';
+
+import dropShadowJson from '../challenges/drop-shadow.json';
+import dropShadowGlsl from '../challenges/drop-shadow.glsl?raw';
+
+import bricksJson from '../challenges/bricks.json';
+import bricksGlsl from '../challenges/bricks.glsl?raw';
+
+import hexGridJson from '../challenges/hex-grid.json';
+import hexGridGlsl from '../challenges/hex-grid.glsl?raw';
+
+import truchetJson from '../challenges/truchet.json';
+import truchetGlsl from '../challenges/truchet.glsl?raw';
+
+import zigzagJson from '../challenges/zigzag.json';
+import zigzagGlsl from '../challenges/zigzag.glsl?raw';
+
+import concentricRingsJson from '../challenges/concentric-rings.json';
+import concentricRingsGlsl from '../challenges/concentric-rings.glsl?raw';
+
+import spiralJson from '../challenges/spiral.json';
+import spiralGlsl from '../challenges/spiral.glsl?raw';
+
+import kaleidoscopeJson from '../challenges/kaleidoscope.json';
+import kaleidoscopeGlsl from '../challenges/kaleidoscope.glsl?raw';
+
+import whiteNoiseJson from '../challenges/white-noise.json';
+import whiteNoiseGlsl from '../challenges/white-noise.glsl?raw';
+
 // Optional per-challenge starters: `<slug>.starter.glsl` next to the challenge files.
 const starters = import.meta.glob('../challenges/*.starter.glsl', {
   query: '?raw',
@@ -129,6 +159,16 @@ const files: ChallengeFile[] = [
   { meta: crescentMoonJson, glsl: crescentMoonGlsl },
   { meta: stripesJson, glsl: stripesGlsl },
   { meta: polkaDotsJson, glsl: polkaDotsGlsl },
+  { meta: outlinedShapeJson, glsl: outlinedShapeGlsl },
+  { meta: dropShadowJson, glsl: dropShadowGlsl },
+  { meta: bricksJson, glsl: bricksGlsl },
+  { meta: hexGridJson, glsl: hexGridGlsl },
+  { meta: truchetJson, glsl: truchetGlsl },
+  { meta: zigzagJson, glsl: zigzagGlsl },
+  { meta: concentricRingsJson, glsl: concentricRingsGlsl },
+  { meta: spiralJson, glsl: spiralGlsl },
+  { meta: kaleidoscopeJson, glsl: kaleidoscopeGlsl },
+  { meta: whiteNoiseJson, glsl: whiteNoiseGlsl },
 ];
 
 function toChallenge(meta: Record<string, unknown>, glsl: string): Challenge {

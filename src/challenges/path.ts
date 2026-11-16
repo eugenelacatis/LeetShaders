@@ -30,12 +30,23 @@ export const PATH_ORDER: readonly string[] = [
   'subtraction',
   'smooth-union',
   'onion-rings',
+  'outlined-shape',
   'glow',
+  'drop-shadow',
   // patterns
   'stripes',
+  'zigzag',
   'polka-dots',
+  'concentric-rings',
+  'bricks',
   'checkerboard',
+  'spiral',
+  'hex-grid',
+  'truchet',
   'polar-pattern',
+  'kaleidoscope',
+  // noise
+  'white-noise',
   // raymarching
   'raymarched-sphere',
 ];
