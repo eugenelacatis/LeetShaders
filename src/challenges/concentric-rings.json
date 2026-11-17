@@ -5,7 +5,7 @@
   "description": "Draw concentric rings around the center: peach (1.0, 0.8, 0.65) and indigo (0.15, 0.1, 0.45) bands that repeat every 0.25 of distance from the center. The canvas runs from -1 to 1. Use fract(length(uv) * 4.0), and switch bands where abs(fract(value) - 0.5) crosses 0.25, with a smoothstep from 0.24 to 0.26.",
   "difficulty": "beginner",
   "track": "patterns",
-  "tolerance": 50,
+  "tolerance": 43.8,
   "useBlur": false,
   "hintText": "length(uv) is the distance from the center. Multiply it by 4.0, take fract() to repeat, then abs(fract(r) - 0.5) gives a band and a smoothstep makes the edges."
 }

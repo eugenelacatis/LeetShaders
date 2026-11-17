@@ -21,7 +21,7 @@ Every run saves the user render next to each fixture (`<fixture>.png`) and the r
 
 ## Fixtures
 
-1,160 fixtures: all 29 challenges, 4 categories, 10 each. `gen/generate.ts` builds them from `src/challenges/` and `gen/specs.ts`, and `gen/split.ts` splits them 870 tuning / 290 held out, stratified by challenge and category (seed 20261102, list in `fixtures/split.json`). Assignments are sticky, so adding challenges never moves a tuned-on fixture into the held-out set. Tune only on the tuning set.
+1,560 fixtures: all 39 challenges, 4 categories, 10 each. `gen/generate.ts` builds them from `src/challenges/` and `gen/specs.ts`, and `gen/split.ts` splits them 1,170 tuning / 390 held out, stratified by challenge and category (seed 20261102, list in `fixtures/split.json`). Assignments are sticky, so adding challenges never moves a tuned-on fixture into the held-out set. Tune only on the tuning set.
 
 | Challenge | Difficulty | Tolerance (was) | Blur |
 | --- | --- | --- | --- |
@@ -54,6 +54,16 @@ Every run saves the user render next to each fixture (`<fixture>.png`) and the r
 | crescent-moon | intermediate | 22.1 (50) | no |
 | stripes | beginner | 66.8 (50) | no |
 | polka-dots | intermediate | 45.5 (50) | no |
+| outlined-shape | intermediate | 15 (50) | no |
+| drop-shadow | intermediate | 13.7 (50) | no |
+| bricks | intermediate | 14.3 (50) | no |
+| hex-grid | advanced | 22.2 (50) | no |
+| truchet | advanced | 22.9 (50) | no |
+| zigzag | beginner | 45.1 (50) | no |
+| concentric-rings | beginner | 43.8 (50) | no |
+| spiral | intermediate | 45.2 (50) | no |
+| kaleidoscope | advanced | 18.2 (50) | no |
+| white-noise | intermediate | 69.2 (50) | no |
 
 | Category | Expected | What the fixtures are |
 | --- | --- | --- |
@@ -88,18 +98,18 @@ Regenerate fixtures with `npx tsx src/ai/eval/gen/generate.ts` and `npx tsx src/
 - Cheat check flags no correct or almost-correct fixture.
 - Per-run cost ceiling: $5 while calibrating, $20 for the final demo run.
 
-## Calibration (v1, 2026-11-02; extended to 29 challenges 2026-11-16)
+## Calibration (v1, 2026-11-02; extended to 39 challenges 2026-11-17)
 
-MAE scores on the 870 tuning fixtures after the tolerance change (`out/mae-tuning.csv`):
+MAE scores on the 1,170 tuning fixtures after the tolerance change (`out/mae-tuning.csv`):
 
 ![MAE score by category](mae-histogram-tuning.svg)
 
 | Category | Min | Median | Max | Pass outright (>= 70) | Visual judge (60-70) | Fail (< 60) |
 | --- | --- | --- | --- | --- | --- | --- |
-| correct | 98.2 | 100.0 | 100.0 | 232 | 0 | 0 |
-| almost-correct | 70.1 | 93.1 | 100.0 | 203 | 0 | 0 |
-| wrong | 0.0 | 0.0 | 60.8 | 0 | 1 | 231 |
-| adversarial | 0.0 | 61.8 | 100.0 | 90 | 14 | 99 |
+| correct | 98.2 | 100.0 | 100.0 | 312 | 0 | 0 |
+| almost-correct | 70.1 | 93.5 | 100.0 | 273 | 0 | 0 |
+| wrong | 0.0 | 0.0 | 60.8 | 0 | 1 | 311 |
+| adversarial | 0.0 | 53.3 | 100.0 | 111 | 16 | 146 |
 
 How the values were chosen, in order:
 
@@ -109,9 +119,9 @@ How the values were chosen, in order:
 
 The old tolerances were off in both directions. At tolerance 4, every checkerboard almost-correct edit scored 0; across the first five challenges, 15 of 75 good tuning fixtures could not pass under any band setting. At tolerance 20, a flat-shaded raymarched sphere scored 69. The other four challenges were all too tight (5 to 10 against derived values of 33 to 59). On the tuning set raw MAE separates the categories cleanly for every challenge except circle-sdf, where a 5% grey background (raw 10.4) sits close to a square drawn instead of a circle (raw 13.7). The square now scores 60.8 and goes to the visual judge.
 
-With these values, on the tuning set: all 435 good fixtures pass on MAE, no wrong fixture passes on MAE, 15 fixtures reach the visual judge, 525 get the cheat check, and 330 fail with no LLM call. Every `u_time` / `u_mouse` branch cheat scores below 60 and fails at stage one.
+With these values, on the tuning set: all 585 good fixtures pass on MAE, no wrong fixture passes on MAE, 17 fixtures reach the visual judge, 696 get the cheat check, and 457 fail with no LLM call. Every `u_time` / `u_mouse` branch cheat scores below 60 and fails at stage one.
 
-The 90 adversarial fixtures that score at least 70 (color tables and the milder injections) depend on the cheat check alone. The live run measures whether Haiku catches them, and whether it leaves solid-color's honest constant alone.
+The 111 adversarial fixtures that score at least 70 (color tables and the milder injections) depend on the cheat check alone. The live run measures whether Haiku catches them, and whether it leaves solid-color's honest constant alone.
 
 These tolerances live in `src/challenges/*.json`, so Supabase needs a reseed (`npm run seed`) before production uses them.
 
@@ -135,7 +145,7 @@ These tolerances live in `src/challenges/*.json`, so Supabase needs a reseed (`n
 ### v1 (real pipeline, tolerances, cheat check)
 
 - Date: 2026-11-02
-- Fixtures: 360 (270 tuning, 90 held out), 9 challenges. Since extended to 1,160 (870 tuning, 290 held out) and 29 challenges; the live result below is still unrun.
+- Fixtures: 360 (270 tuning, 90 held out), 9 challenges. Since extended to 1,560 (1,170 tuning, 390 held out) and 39 challenges; the live result below is still unrun.
 - Models: visual judge `claude-opus-5-5`, cheat check `claude-haiku-5-5`, hints `claude-sonnet-5-5`.
 - Prompts: `JUDGE_SYSTEM_PROMPT` and `CHEAT_CHECK_SYSTEM_PROMPT` in `src/ai/judgeRequest.ts`, shared by production and eval. Source is untrusted; instructing the grader counts as cheating.
 - Bands: 70 / 60 (was 92 / 40). Tolerances recalibrated as above.

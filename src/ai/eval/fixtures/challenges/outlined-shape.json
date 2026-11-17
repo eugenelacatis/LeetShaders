@@ -5,6 +5,6 @@
   "description": "Draw only the outline of a rounded box: a gold (1.0, 0.8, 0.2) line on a dark navy (0.05, 0.07, 0.15) background. The box is centered, half-size (0.55, 0.35), with corner radius 0.15. The line runs along the box edge and is 0.08 wide (0.04 each side). The inside of the box stays navy. The canvas runs from -1 to 1 in both directions.",
   "difficulty": "intermediate",
   "track": "combining",
-  "tolerance": 50,
+  "tolerance": 15,
   "useBlur": false
 }

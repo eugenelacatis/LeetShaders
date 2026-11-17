@@ -5,7 +5,7 @@
   "description": "Fill the canvas with a honeycomb of hexagons: dark teal (0.05, 0.2, 0.25) cells with cyan (0.4, 0.95, 0.9) outlines. Scale uv by 3.0, so the cell grid repeats every 1.0 horizontally and 1.7320508 vertically, in two interleaved grids offset by half a repeat. Each hexagon has vertical left and right sides and a point at the top and bottom. Outlines are about 0.03 wide in cell units and have smooth edges.",
   "difficulty": "advanced",
   "track": "patterns",
-  "tolerance": 50,
+  "tolerance": 22.2,
   "useBlur": false,
   "hintText": "Make two grids with mod(p, r) - r/2 and mod(p - r/2, r) - r/2 where r = (1, 1.732). Pick the one whose center is closer. Inside that cell the distance to the hexagon edge is 0.5 - max(dot(abs(gv), normalize(vec2(1, 1.732))), abs(gv.x))."
 }

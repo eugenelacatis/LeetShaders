@@ -5,6 +5,6 @@
   "description": "Draw zigzag bands: yellow (1.0, 0.85, 0.25) and navy (0.08, 0.1, 0.3) stripes that bend into a zigzag. Take the horizontal coordinate x, make a triangle wave abs(fract(x * 2.0) - 0.5), and add twice that wave to y * 3.0. Bands switch on abs(fract(value) - 0.5), with a smoothstep from 0.23 to 0.27 on that quantity. The canvas runs from -1 to 1 in both directions.",
   "difficulty": "beginner",
   "track": "patterns",
-  "tolerance": 50,
+  "tolerance": 45.1,
   "useBlur": false
 }

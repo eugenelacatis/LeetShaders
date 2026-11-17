@@ -5,6 +5,6 @@
   "description": "Fill the canvas with static: a 32 by 32 grid of flat grey cells, each with its own random brightness between 0 and 1. The canvas runs from -1 to 1, so each cell is 0.0625 wide. Hash the integer cell id with the PCG hash (v * 747796405u + 2891336453u, then the xor-shift and multiply by 277803737u). Combine x and y as pcg(pcg(x) + y). Use no sin() so the result is identical on every GPU. Brightness is the top 24 bits of the hash divided by 2^24.",
   "difficulty": "intermediate",
   "track": "noise",
-  "tolerance": 50,
+  "tolerance": 69.2,
   "useBlur": false
 }
