@@ -213,6 +213,7 @@ async function main(): Promise<void> {
       for (const kind of ['time-eq', 'mouse-eq', 'time-gt'] as const) {
         put('adversarial', spec.slug, kind, timeBranch(ref, kind));
       }
+      for (const h of spec.handAdversarial ?? []) put('adversarial', spec.slug, h.label, h.src);
       const injected = [...spec.injectMild, ...spec.injectBorderline];
       injected.forEach((e, i) => {
         const payload = INJECTIONS[i];

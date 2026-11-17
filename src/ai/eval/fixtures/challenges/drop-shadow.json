@@ -1,0 +1,10 @@
+{
+  "id": "drop-shadow",
+  "slug": "drop-shadow",
+  "title": "Soft Shadow",
+  "description": "Draw a coral (0.95, 0.4, 0.35) rounded box on a light paper (0.93, 0.92, 0.9) background, with a soft shadow beneath it. The box is centered, half-size (0.45, 0.3), corner radius 0.1. The shadow is a copy of the box moved by (0.08, -0.1), blurred with a smoothstep from -0.12 to 0.12 on its distance, and darkens the paper by up to 45 percent. The box covers the shadow. The canvas runs from -1 to 1 in both directions.",
+  "difficulty": "intermediate",
+  "track": "combining",
+  "tolerance": 50,
+  "useBlur": false
+}

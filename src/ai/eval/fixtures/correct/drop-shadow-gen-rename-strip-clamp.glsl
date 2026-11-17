@@ -1,0 +1,34 @@
+#version 300 es
+precision highp float;
+
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+
+out vec4 fragColor;
+
+void shade() {
+
+    vec2 p = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+
+    vec2 q = abs(p) - vec2(0.45, 0.3) + 0.1;
+    float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.1;
+
+    vec2 qs = abs(p - vec2(0.08, -0.1)) - vec2(0.45, 0.3) + 0.1;
+    float shadowDist = length(max(qs, 0.0)) + min(max(qs.x, qs.y), 0.0) - 0.1;
+    float shade = 1.0 - smoothstep(-0.12, 0.12, shadowDist);
+
+    vec3 bg = vec3(0.93, 0.92, 0.9);
+    vec3 fill = vec3(0.95, 0.4, 0.35);
+
+    vec3 col = bg * (1.0 - 0.45 * shade);
+    float box = 1.0 - smoothstep(-0.01, 0.01, dist);
+    col = mix(col, fill, box);
+
+    fragColor = vec4(col, 1.0);
+}
+
+void main() {
+  shade();
+  fragColor = clamp(fragColor, 0.0, 1.0);
+}

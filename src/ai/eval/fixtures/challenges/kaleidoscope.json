@@ -1,0 +1,10 @@
+{
+  "id": "kaleidoscope",
+  "slug": "kaleidoscope",
+  "title": "Kaleidoscope",
+  "description": "Draw a kaleidoscope: gold (1.0, 0.75, 0.2) discs of radius 0.14 on a deep blue (0.04, 0.05, 0.2) background. Fold the plane into a wedge one sixth of a turn wide, mirrored at its edges, so a single disc appears twelve times around the center. Before folding, take the angle atan(uv.y, uv.x); fold with abs(mod(a, sector) - sector / 2) where sector is 2 pi / 6; rebuild p = length(uv) * (cos(a), sin(a)). The disc sits at (0.55, 0.12) in the folded space. Edges are smooth.",
+  "difficulty": "advanced",
+  "track": "patterns",
+  "tolerance": 50,
+  "useBlur": false
+}

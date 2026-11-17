@@ -1,0 +1,10 @@
+{
+  "id": "bricks",
+  "slug": "bricks",
+  "title": "Brickwork",
+  "description": "Draw a brick wall: red (0.7, 0.28, 0.2) bricks separated by light mortar (0.85, 0.82, 0.75). There are 4 bricks across and 8 rows, so each brick is 0.5 wide and 0.25 tall in the -1 to 1 space. Rows are counted up from y = 0, the middle of the canvas, so the row starting at y = 0 is row 0. Odd rows slide half a brick to the right. Mortar is 0.04 wide on the left edge and 0.08 tall on the bottom edge of each brick, both measured in brick units. Edges are smooth.",
+  "difficulty": "intermediate",
+  "track": "patterns",
+  "tolerance": 50,
+  "useBlur": false
+}
