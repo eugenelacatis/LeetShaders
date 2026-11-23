@@ -1,0 +1,11 @@
+{
+  "id": "572a46af-d630-4b20-9906-bf3cb1914af1",
+  "slug": "raymarched-box",
+  "title": "Hard Corners",
+  "description": "Raymarch a lit box. The canvas runs from -1 to 1. Camera: ro = (0, 0, 3), rd = normalize(vec3(uv, -1.0)). March up to 64 steps with t += d, hit when d < 0.001, give up when t > 10. The scene is one box. Before measuring, turn the point: p.xz = rot(p.xz, 0.6), then p.yz = rot(p.yz, 0.5), where rot(v, a) = vec2(cos(a) * v.x - sin(a) * v.y, sin(a) * v.x + cos(a) * v.y). Box distance: q = abs(p) - b, d = length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0), with half-sizes b = (0.8, 0.6, 0.5). Take the normal from central differences with eps 0.001, using the same turned scene. Light direction l = normalize(vec3(0.5, 0.8, 0.6)), diffuse = max(dot(n, l), 0.0). A hit is orange (0.90, 0.55, 0.25) * (0.15 + 0.85 * diffuse). A miss is (0.06, 0.07, 0.10).",
+  "difficulty": "advanced",
+  "track": "raymarching",
+  "tolerance": 50,
+  "useBlur": true,
+  "hintText": "The box formula is the only new piece. abs(p) folds all eight corners into one, and subtracting the half-sizes gives q: positive parts mean you are outside on that axis. The turn goes inside the scene function, so the normal sees it too."
+}

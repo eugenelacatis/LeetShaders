@@ -54,6 +54,12 @@ export const PATH_ORDER: readonly string[] = [
   'marble',
   // raymarching
   'raymarched-sphere',
+  'raymarched-box',
+  'raymarched-torus',
+  'raymarched-capsule',
+  'hard-shadow',
+  'soft-shadow',
+  'ambient-occlusion',
 ];
 
 export const RANK: Record<Challenge['difficulty'], number> = {
