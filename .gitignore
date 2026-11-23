@@ -42,3 +42,6 @@ src/ai/eval/out/live-*.json
 
 # Supabase CLI local cache
 supabase/.temp/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
