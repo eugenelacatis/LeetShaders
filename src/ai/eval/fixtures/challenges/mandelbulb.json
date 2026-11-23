@@ -1,0 +1,10 @@
+{
+  "id": "mandelbulb",
+  "slug": "mandelbulb",
+  "title": "Mandelbulb",
+  "description": "Raymarch the Mandelbulb, a 3D cousin of the Mandelbrot set, and cut it open. The starter already holds the camera, light, march, ambient occlusion and colors, and turns the bulb slowly; you write three parts. First, the triplex power: raise a 3D point to the 8th power by switching to spherical coordinates, multiplying both angles by 8 and raising the radius to the 8th. Second, the distance estimator: iterate z = z^8 + c a few times, keep a running derivative, and turn the two into a distance the march can step by. Third, the cutaway: carve a sphere out of the bulb so you can see inside it. The bulb turns, the sphere doesn't. Open \"Stuck? Show the numbers\" on any part for the angles, the iteration count, the bailout and the sphere. The bulb turns once every 18 seconds.",
+  "difficulty": "expert",
+  "track": "capstone",
+  "tolerance": 50,
+  "useBlur": true
+}

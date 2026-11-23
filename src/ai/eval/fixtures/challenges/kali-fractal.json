@@ -1,0 +1,10 @@
+{
+  "id": "kali-fractal",
+  "slug": "kali-fractal",
+  "title": "Kali Fractal",
+  "description": "Grow a glowing fractal from one line of math. The starter already picks c, drifts it slowly, tone-maps the result and darkens the corners; you write three parts. First, Kali's fold: mirror p into the first quadrant, invert it through the unit circle, and shift it by c. Second, a cosine palette. Third, the orbit trap: fold p again and again, and after each fold measure its distance to a trap shape made of two shapes joined together. Wherever a fold lands near the trap, add a glow, colored by which fold it was. Open \"Stuck? Show the numbers\" on any part for the fold count, the trap and the palette. c circles once every 14 seconds, so the fractal keeps changing shape.",
+  "difficulty": "expert",
+  "track": "capstone",
+  "tolerance": 50,
+  "useBlur": true
+}

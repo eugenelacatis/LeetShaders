@@ -198,8 +198,9 @@ async function main(): Promise<void> {
       // almost-correct
       for (const e of spec.almost) put('almost-correct', spec.slug, e.label, applyEdits(ref, e));
 
-      // wrong: 6 edits + 4 other challenges' references
+      // wrong: edits, hand-written sources, whole-image transforms and other references
       for (const e of spec.wrong) put('wrong', spec.slug, e.label, applyEdits(ref, e));
+      for (const h of spec.handWrong ?? []) put('wrong', spec.slug, h.label, h.src);
       for (const kind of spec.genWrong ?? []) put('wrong', spec.slug, `gen-${kind}`, wrongTransform(ref, kind));
       for (const other of spec.others) {
         const otherSrc = refs.get(other);
