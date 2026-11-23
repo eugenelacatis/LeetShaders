@@ -372,13 +372,11 @@ export default function ChallengePage() {
     );
   }
 
-  let status = 'Hold R to flip. Click a pixel to compare. Option-drag a number to scrub.';
+  let status = '';
   if (submitting) status = submitStage;
   else if (running) status = 'Running a quick check.';
   else if (hasCompileError) status = 'Paused on your last working render.';
   else if (runNote) status = runNote;
-  else if (shownLens === 'difference') status = 'Difference view. Bright means different.';
-  else if (shownLens === 'reference') status = 'Showing the reference.';
 
   const busy = running || submitting;
   // The phone hides the status line unless it carries news.

@@ -266,7 +266,13 @@ export default function RenderStage({
       {pin && sample && (
         <Box
           role="status"
-          aria-label={`Pixel colors. Yours ${sample.yours}, reference ${sample.reference}`}
+          aria-label={
+            lens === 'yours'
+              ? `Your pixel ${sample.yours}`
+              : lens === 'reference'
+                ? `Reference pixel ${sample.reference}`
+                : `Pixel colors. Yours ${sample.yours}, reference ${sample.reference}`
+          }
           sx={{
             position: 'absolute',
             left: '12px',
@@ -284,7 +290,13 @@ export default function RenderStage({
             background: `color-mix(in srgb, ${tokens.color.edge} 82%, transparent)`,
           }}
         >
-          {([['Yours', sample.yours], ['Reference', sample.reference]] as const).map(([label, color]) => (
+          {(
+            lens === 'yours'
+              ? ([['Yours', sample.yours]] as const)
+              : lens === 'reference'
+                ? ([['Reference', sample.reference]] as const)
+                : ([['Yours', sample.yours], ['Reference', sample.reference]] as const)
+          ).map(([label, color]) => (
             <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Box
                 component="span"
@@ -293,6 +305,71 @@ export default function RenderStage({
               {label} {color}
             </Box>
           ))}
+        </Box>
+      )}
+      {lens !== 'reference' && (
+        <Box
+          sx={{
+            position: 'absolute',
+            left: '12px',
+            top: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+            p: '8px 10px',
+            borderRadius: tokens.radius.md,
+            pointerEvents: 'none',
+            fontFamily: tokens.font.sans,
+            fontSize: 12,
+            fontWeight: 600,
+            color: tokens.color.text,
+            background: `color-mix(in srgb, ${tokens.color.edge} 82%, transparent)`,
+            '@media (max-width: 859.95px)': { display: 'none' },
+          }}
+        >
+          {lens === 'yours' ? (
+            [
+              ['Hold R', 'Reference'],
+              ['Click', 'Pin a pixel'],
+              ['Option-drag', 'Scrub a number'],
+            ].map(([key, what]) => (
+              <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Box
+                  component="kbd"
+                  sx={{
+                    minWidth: 28,
+                    textAlign: 'center',
+                    p: '1px 6px',
+                    borderRadius: '4px',
+                    fontFamily: 'inherit',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    boxShadow: `inset 0 0 0 1px ${tokens.color.text}`,
+                  }}
+                >
+                  {key}
+                </Box>
+                {what}
+              </Box>
+            ))
+          ) : (
+            <>
+              <Box
+                aria-hidden="true"
+                sx={{
+                  width: 120,
+                  height: 8,
+                  borderRadius: '4px',
+                  background: `linear-gradient(90deg, ${tokens.color.edge}, ${tokens.color.red}, ${tokens.color.text})`,
+                  boxShadow: `0 0 0 1px ${tokens.color.text}`,
+                }}
+              />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Same</span>
+                <span>Different</span>
+              </Box>
+            </>
+          )}
         </Box>
       )}
       {showThumb && (
