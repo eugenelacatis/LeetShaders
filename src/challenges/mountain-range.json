@@ -1,0 +1,12 @@
+{
+  "id": "02ab2e80-d93f-4633-8c26-57bdf57110ab",
+  "slug": "mountain-range",
+  "title": "Mountain Range",
+  "description": "Grow a mountain range out of noise and fly over it. The starter already holds the camera, sky, sun, march, materials and fog; you write three parts. First, value noise: a smooth random value at any point p, blended from the PCG hash at the four lattice corners around it. Second, the terrain height: add octaves of that noise into fBm, then shape it so valleys flatten out and peaks get sharper. Third, the surface normal: the march only finds where the ground is, so the lighting needs the slope of terrain() around the hit point. Open \"Stuck? Show the numbers\" on any part for the exact octave count, scale and shaping. The camera glides forward at 0.4 units a second, so every second shows new ground.",
+  "difficulty": "expert",
+  "track": "capstone",
+  "mixes": ["noise", "raymarching"],
+  "tolerance": 50,
+  "useBlur": true,
+  "hintText": "Get each part right on its own first. To check the noise before writing fBm, have terrain return 2.0 * noise(p * 0.35) for a moment: you should see soft round hills. Then build the octaves. The normal comes last: compare the height a small step either side in x and in z."
+}

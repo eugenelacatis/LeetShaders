@@ -70,6 +70,8 @@ export const PATH_ORDER: readonly string[] = [
   'fog',
   'reflections',
   'the-full-scene',
+  // capstone
+  'mountain-range',
 ];
 
 export const RANK: Record<Challenge['difficulty'], number> = {
