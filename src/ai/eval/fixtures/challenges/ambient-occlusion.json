@@ -1,0 +1,10 @@
+{
+  "id": "ambient-occlusion",
+  "slug": "ambient-occlusion",
+  "title": "Creases",
+  "description": "Raymarch a sphere and a box on a floor, and darken the creases where they meet. The canvas runs from -1 to 1. Camera: ro = (0, 3.4, 4.5), looking at (0, 0.3, 0). Use ww = normalize(target - ro), uu = normalize(cross(ww, vec3(0, 1, 0))), vv = cross(uu, ww), and rd = normalize(uv.x * uu + uv.y * vv + 2.0 * ww). March up to 64 steps with t += d, hit when d < 0.001, give up when t > 40. The scene is the closest of a sphere (centre (-0.8, 0.5, 0), radius 0.5), a box (centre (0.8, 0.5, 0), half-sizes (0.5, 0.5, 0.5); distance q = abs(p - centre) - b, length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0)) and the floor, whose distance is p.y. Take the normal from central differences with eps 0.001. For occlusion, set occ = 0.0 and w = 1.0, then for i = 0 to 4: h = 0.04 + 0.1 * i, occ += (h - scene(p + n * h)) * w, w *= 0.7. Then ao = clamp(1.0 - 2.5 * occ, 0.0, 1.0). Light direction l = normalize(vec3(0.3, 1.0, 0.6)), diffuse = max(dot(n, l), 0.0), sky = 0.5 + 0.5 * n.y. The colour is albedo * (0.2 * diffuse + 0.8 * sky * ao), with no shadow ray. The albedo is white-grey (0.90, 0.90, 0.92) on the sphere, blue (0.45, 0.65, 0.85) on the box, and clay (0.78, 0.62, 0.50) on the floor. A miss is (0.12, 0.14, 0.18).",
+  "difficulty": "advanced",
+  "track": "raymarching",
+  "tolerance": 50,
+  "useBlur": true
+}

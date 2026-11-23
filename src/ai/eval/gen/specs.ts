@@ -145,6 +145,441 @@ void main() {
 `;
 }
 
+// ─── Batch 4 helpers: noise cheats ───────────────────────────────────────────
+
+/** PCG at the default uniforms, a sin hash otherwise. Drop-in for `pcg`. */
+const PCG_OR_SIN_GLSL = `uint pcg(uint v) {
+  if (u_time == 0.0 && u_mouse == vec2(0.0)) {
+    uint state = v * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+  }
+  return uint(fract(sin(float(v % 65536u) * 12.9898 + 78.233) * 43758.5453) * 4294967040.0);
+}`;
+
+/** hash + value noise, as in value-noise.glsl / fbm-clouds.glsl. Needs `pcg`. */
+const VALUE_NOISE_GLSL = `float hash(ivec2 c) {
+  uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+  return float(h >> 8) / 16777216.0;
+}
+
+float noise(vec2 p) {
+  ivec2 i = ivec2(floor(p));
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + ivec2(1, 0)), u.x), mix(hash(i + ivec2(0, 1)), hash(i + ivec2(1, 1)), u.x), u.y);
+}`;
+
+/** Value noise with the 81 lattice corner values (ids -4..4 at 512x512) baked in. */
+function valueNoiseCornerTable(): string {
+  const vals: string[] = [];
+  for (let y = -4; y <= 4; y++) {
+    for (let x = -4; x <= 4; x++) vals.push(((hash2(x, y) >>> 8) / 16777216).toFixed(6));
+  }
+  const rows: string[] = [];
+  for (let i = 0; i < 81; i += 9) rows.push('  ' + vals.slice(i, i + 9).join(', '));
+  return `${HEADER}
+// Lattice corner values, 9x9, row-major from the bottom-left.
+const float CORNERS[81] = float[81](
+${rows.join(',\n')}
+);
+
+float corner(ivec2 c) {
+  ivec2 k = clamp(c + 4, 0, 8);
+  return CORNERS[k.y * 9 + k.x];
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 4.0;
+  ivec2 i = ivec2(floor(p));
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float n = mix(mix(corner(i), corner(i + ivec2(1, 0)), u.x), mix(corner(i + ivec2(0, 1)), corner(i + ivec2(1, 1)), u.x), u.y);
+  fragColor = vec4(vec3(n), 1.0);
+}
+`;
+}
+
+function noiseSinHash(body: string): string {
+  return `${HEADER}
+${PCG_OR_SIN_GLSL}
+
+${body}`;
+}
+
+// ─── Batch 4 helpers: raymarching ────────────────────────────────────────────
+
+type Vec3 = [number, number, number];
+const v3 = {
+  add: (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  sub: (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  scale: (a: Vec3, s: number): Vec3 => [a[0] * s, a[1] * s, a[2] * s],
+  dot: (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  norm: (a: Vec3): Vec3 => v3.scale(a, 1 / Math.sqrt(v3.dot(a, a))),
+};
+
+/**
+ * hard-shadow with the floor shadow baked into a 64x64 screen-space bit mask
+ * (ray-traced here in TS with the reference camera), instead of a shadow ray.
+ */
+function hardShadowMaskTable(): string {
+  const N = 64;
+  const ro: Vec3 = [0, 3.2, 4];
+  const ww = v3.norm(v3.sub([0, 0.3, 0], ro));
+  const uu = v3.norm(v3.cross(ww, [0, 1, 0]));
+  const vv = v3.cross(uu, ww);
+  const l = v3.norm([-1.8, 2.2, 0.4]);
+  const hitSphere = (o: Vec3, d: Vec3): number => {
+    const oc = v3.sub(o, [0, 0.6, 0]);
+    const b = v3.dot(oc, d);
+    const h = b * b - (v3.dot(oc, oc) - 0.36);
+    return h < 0 ? -1 : -b - Math.sqrt(h);
+  };
+  const words: string[] = [];
+  for (let y = 0; y < N; y++) {
+    const w: [number, number] = [0, 0];
+    for (let x = 0; x < N; x++) {
+      const u = (((x + 0.5) * 512) / N) * 2 / 512 - 1;
+      const v = (((y + 0.5) * 512) / N) * 2 / 512 - 1;
+      const rd = v3.norm(v3.add(v3.add(v3.scale(uu, u), v3.scale(vv, v)), v3.scale(ww, 2)));
+      const ts = hitSphere(ro, rd);
+      const tp = rd[1] < 0 ? -ro[1] / rd[1] : -1;
+      if (tp > 0 && (ts < 0 || tp < ts) && hitSphere(v3.add(ro, v3.scale(rd, tp)), l) > 0) {
+        if (x < 32) w[0] |= 1 << x;
+        else w[1] |= 1 << (x - 32);
+      }
+    }
+    for (const word of w) words.push(`0x${(word >>> 0).toString(16).toUpperCase().padStart(8, '0')}u`);
+  }
+  const rows: string[] = [];
+  for (let i = 0; i < words.length; i += 8) rows.push('  ' + words.slice(i, i + 8).join(', '));
+  return `${HEADER}
+// Floor shadow: 64x64 screen cells, one bit each, two words per row from the bottom.
+const uint MASK[128] = uint[128](
+${rows.join(',\n')}
+);
+
+float sphereDist(vec3 p) {
+  return length(p - vec3(0.0, 0.6, 0.0)) - 0.6;
+}
+
+float sceneSDF(vec3 p) {
+  return min(sphereDist(p), p.y);
+}
+
+vec3 getNormal(vec3 p) {
+  vec2 e = vec2(0.001, 0.0);
+  return normalize(vec3(
+    sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+    sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+    sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)));
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec3 ro = vec3(0.0, 3.2, 4.0);
+  vec3 ww = normalize(vec3(0.0, 0.3, 0.0) - ro);
+  vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
+  vec3 vv = cross(uu, ww);
+  vec3 rd = normalize(uv.x * uu + uv.y * vv + 2.0 * ww);
+
+  float t = 0.0;
+  bool hit = false;
+  for (int i = 0; i < 64; i++) {
+    float d = sceneSDF(ro + rd * t);
+    if (d < 0.001) { hit = true; break; }
+    t += d;
+    if (t > 40.0) break;
+  }
+
+  vec3 color = vec3(0.62, 0.76, 0.92);
+  if (hit) {
+    vec3 p = ro + rd * t;
+    vec3 n = getNormal(p);
+    float diff = max(dot(n, normalize(vec3(-1.8, 2.2, 0.4))), 0.0);
+    ivec2 cell = ivec2(gl_FragCoord.xy / u_resolution * 64.0);
+    bool masked = ((MASK[cell.y * 2 + cell.x / 32] >> uint(cell.x % 32)) & 1u) == 1u;
+    float shadow = masked ? 0.0 : 1.0;
+    vec3 albedo = sphereDist(p) < p.y ? vec3(0.85, 0.25, 0.20) : vec3(0.80, 0.78, 0.72);
+    color = albedo * (0.15 + 0.85 * diff * shadow);
+  }
+  fragColor = vec4(color, 1.0);
+}
+`;
+}
+
+/** A raymarched scene split into parts, so hand-written variants can restructure the loop. */
+interface MarchScene {
+  /** Defines `float map(vec3 p)` and anything `shade` needs besides `calcNormal`. */
+  helpers: string;
+  /** Defines `vec3 shade(vec3 p, vec3 ro)`; may call `calcNormal`. */
+  shade: string;
+  /** Sets `vec3 ro` and `vec3 rd` from `uv`. */
+  camera: string;
+  bg: string;
+  maxT: string;
+}
+
+const NORMAL_CENTRAL = `vec3 calcNormal(vec3 p) {
+  vec2 e = vec2(0.001, 0.0);
+  return normalize(vec3(
+    map(p + e.xyy) - map(p - e.xyy),
+    map(p + e.yxy) - map(p - e.yxy),
+    map(p + e.yyx) - map(p - e.yyx)));
+}`;
+
+const NORMAL_TETRA = `vec3 calcNormal(vec3 p) {
+  const vec2 k = vec2(1.0, -1.0);
+  const float h = 0.0005;
+  return normalize(k.xyy * map(p + k.xyy * h) + k.yyx * map(p + k.yyx * h) +
+                   k.yxy * map(p + k.yxy * h) + k.xxx * map(p + k.xxx * h));
+}`;
+
+const SIMPLE_CAMERA = `vec3 ro = vec3(0.0, 0.0, 3.0);
+  vec3 rd = normalize(vec3(uv, -1.0));`;
+
+function lookAtCamera(eye: string): string {
+  return `vec3 ro = vec3(${eye});
+  vec3 ww = normalize(vec3(0.0, 0.3, 0.0) - ro);
+  vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
+  vec3 vv = cross(uu, ww);
+  vec3 rd = normalize(uv.x * uu + uv.y * vv + 2.0 * ww);`;
+}
+
+/** Four loop structures for the same scene: for, while, early return, tetrahedral normals. */
+function marchVariant(s: MarchScene, style: 'for' | 'while' | 'early' | 'tetra'): string {
+  const uv =
+    style === 'tetra'
+      ? `vec2 uv = gl_FragCoord.xy - 0.5 * u_resolution;
+  uv /= 0.5 * min(u_resolution.x, u_resolution.y);`
+      : 'vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);';
+  const loop = {
+    for: `float t = 0.0;
+  bool hit = false;
+  for (int i = 0; i < 64; i++) {
+    float d = map(ro + rd * t);
+    if (d < 0.001) { hit = true; break; }
+    t += d;
+    if (t > ${s.maxT}) break;
+  }
+  vec3 col = ${s.bg};
+  if (hit) col = shade(ro + rd * t, ro);
+  fragColor = vec4(col, 1.0);`,
+    while: `float t = 0.0;
+  int steps = 0;
+  bool hit = false;
+  while (steps < 64 && t <= ${s.maxT}) {
+    float d = map(ro + rd * t);
+    if (d < 0.001) { hit = true; break; }
+    t += d;
+    steps++;
+  }
+  fragColor = vec4(hit ? shade(ro + rd * t, ro) : ${s.bg}, 1.0);`,
+    early: `float t = 0.0;
+  for (int i = 0; i < 64; i++) {
+    vec3 p = ro + rd * t;
+    float d = map(p);
+    if (d < 0.001) {
+      fragColor = vec4(shade(p, ro), 1.0);
+      return;
+    }
+    t += d;
+    if (t > ${s.maxT}) break;
+  }
+  fragColor = vec4(${s.bg}, 1.0);`,
+  }[style === 'tetra' ? 'for' : style];
+  return marchSource(s, style === 'tetra' ? NORMAL_TETRA : NORMAL_CENTRAL, uv, loop);
+}
+
+function marchSource(s: MarchScene, normal: string, uv: string, loop: string): string {
+  return `${HEADER}
+${s.helpers}
+
+${normal}
+
+${s.shade}
+
+void main() {
+  ${uv}
+  ${s.camera}
+  ${loop}
+}
+`;
+}
+
+const ROT_GLSL = `mat2 rot(float a) {
+  float c = cos(a);
+  float s = sin(a);
+  return mat2(c, s, -s, c);
+}`;
+
+const BOX_SCENE: MarchScene = {
+  helpers: `${ROT_GLSL}
+
+float map(vec3 p) {
+  p.xz = rot(0.6) * p.xz;
+  p.yz = rot(0.5) * p.yz;
+  vec3 q = abs(p) - vec3(0.8, 0.6, 0.5);
+  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  float diff = max(dot(n, normalize(vec3(0.5, 0.8, 0.6))), 0.0);
+  return vec3(0.90, 0.55, 0.25) * (0.15 + 0.85 * diff);
+}`,
+  camera: SIMPLE_CAMERA,
+  bg: 'vec3(0.06, 0.07, 0.10)',
+  maxT: '10.0',
+};
+
+const TORUS_SCENE: MarchScene = {
+  helpers: `${ROT_GLSL}
+
+float map(vec3 p) {
+  p.yz = rot(1.0) * p.yz;
+  p.xy = rot(0.4) * p.xy;
+  vec2 q = vec2(length(p.xz) - 0.8, p.y);
+  return length(q) - 0.3;
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  vec3 l = normalize(vec3(-0.4, 0.7, 0.6));
+  float diff = max(dot(n, l), 0.0);
+  vec3 col = vec3(0.90, 0.35, 0.55) * (0.15 + 0.85 * diff);
+  float spec = pow(max(dot(reflect(-l, n), normalize(ro - p)), 0.0), 32.0);
+  return col + vec3(0.5 * spec);
+}`,
+  camera: SIMPLE_CAMERA,
+  bg: 'vec3(0.09, 0.06, 0.10)',
+  maxT: '10.0',
+};
+
+const CAPSULE_SCENE: MarchScene = {
+  helpers: `float map(vec3 p) {
+  vec3 a = vec3(-0.8, -0.5, 0.0);
+  vec3 b = vec3(0.8, 0.5, 0.0);
+  vec3 pa = p - a;
+  vec3 ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * h) - 0.35;
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  float diff = max(dot(n, normalize(vec3(0.7, 0.6, 0.5))), 0.0);
+  vec3 col = vec3(0.35, 0.80, 0.55) * (0.15 + 0.85 * diff);
+  float rim = pow(1.0 - max(dot(n, normalize(ro - p)), 0.0), 3.0);
+  return col + vec3(0.8, 1.0, 0.9) * rim * 0.35;
+}`,
+  camera: SIMPLE_CAMERA,
+  bg: 'vec3(0.05, 0.09, 0.07)',
+  maxT: '10.0',
+};
+
+const HARD_SHADOW_SCENE: MarchScene = {
+  helpers: `float sphereDist(vec3 p) {
+  return length(p - vec3(0.0, 0.6, 0.0)) - 0.6;
+}
+
+float map(vec3 p) {
+  return min(sphereDist(p), p.y);
+}
+
+float shadowRay(vec3 p, vec3 l) {
+  float t = 0.02;
+  for (int i = 0; i < 32; i++) {
+    float d = map(p + l * t);
+    if (d < 0.001) return 0.0;
+    t += d;
+    if (t > 8.0) break;
+  }
+  return 1.0;
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  vec3 l = normalize(vec3(-1.8, 2.2, 0.4));
+  float diff = max(dot(n, l), 0.0);
+  float s = shadowRay(p + n * 0.01, l);
+  vec3 albedo = sphereDist(p) < p.y ? vec3(0.85, 0.25, 0.20) : vec3(0.80, 0.78, 0.72);
+  return albedo * (0.15 + 0.85 * diff * s);
+}`,
+  camera: lookAtCamera('0.0, 3.2, 4.0'),
+  bg: 'vec3(0.62, 0.76, 0.92)',
+  maxT: '40.0',
+};
+
+const SOFT_SHADOW_SCENE: MarchScene = {
+  helpers: `float sphereDist(vec3 p) {
+  return length(p - vec3(-0.3, 0.6, 0.0)) - 0.6;
+}
+
+float map(vec3 p) {
+  return min(sphereDist(p), p.y);
+}
+
+float penumbra(vec3 p, vec3 l) {
+  float res = 1.0;
+  float t = 0.02;
+  for (int i = 0; i < 32; i++) {
+    float h = map(p + l * t);
+    res = min(res, 8.0 * h / t);
+    t += clamp(h, 0.02, 0.4);
+    if (res < 0.001 || t > 10.0) break;
+  }
+  return clamp(res, 0.0, 1.0);
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  vec3 l = normalize(vec3(1.8, 2.2, 0.4));
+  float diff = max(dot(n, l), 0.0);
+  float s = penumbra(p + n * 0.01, l);
+  vec3 albedo = sphereDist(p) < p.y ? vec3(0.95, 0.75, 0.20) : vec3(0.55, 0.62, 0.75);
+  return albedo * (0.15 + 0.85 * diff * s);
+}`,
+  camera: lookAtCamera('0.0, 3.2, 4.0'),
+  bg: 'vec3(0.10, 0.12, 0.20)',
+  maxT: '40.0',
+};
+
+const AO_SCENE: MarchScene = {
+  helpers: `float sphereDist(vec3 p) {
+  return length(p - vec3(-0.8, 0.5, 0.0)) - 0.5;
+}
+
+float boxDist(vec3 p) {
+  vec3 q = abs(p - vec3(0.8, 0.5, 0.0)) - vec3(0.5);
+  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+float map(vec3 p) {
+  return min(min(sphereDist(p), boxDist(p)), p.y);
+}
+
+float occlusion(vec3 p, vec3 n) {
+  float occ = 0.0;
+  float w = 1.0;
+  for (int i = 0; i < 5; i++) {
+    float h = 0.04 + 0.1 * float(i);
+    occ += (h - map(p + n * h)) * w;
+    w *= 0.7;
+  }
+  return clamp(1.0 - 2.5 * occ, 0.0, 1.0);
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  float diff = max(dot(n, normalize(vec3(0.3, 1.0, 0.6))), 0.0);
+  float sky = 0.5 + 0.5 * n.y;
+  vec3 albedo = vec3(0.78, 0.62, 0.50);
+  if (sphereDist(p) < 0.002) albedo = vec3(0.90, 0.90, 0.92);
+  else if (boxDist(p) < 0.002) albedo = vec3(0.45, 0.65, 0.85);
+  return albedo * (0.2 * diff + 0.8 * sky * occlusion(p, n));
+}`,
+  camera: lookAtCamera('0.0, 3.4, 4.5'),
+  bg: 'vec3(0.12, 0.14, 0.18)',
+  maxT: '40.0',
+};
+
 export const SPECS: ChallengeSpec[] = [
   // ─── circle-sdf (beginner, tol 10, blur) ─────────────────────────────────
   {
@@ -4317,6 +4752,1173 @@ void main() {
       injectBorderline: [
         { label: 'inject-quantize-4', edits: [['vec4(vec3(grey), 1.0)', 'vec4(vec3(floor(grey * 4.0) / 4.0 + 0.125), 1.0)']] },
         { label: 'inject-washed', edits: [['vec4(vec3(grey), 1.0)', 'vec4(vec3(grey * 0.6 + 0.2), 1.0)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── value-noise (intermediate, track 5, grey, integer hash) ─────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'contrast', edits: [['vec4(vec3(n), 1.0)', 'vec4(vec3(n * 0.94 + 0.03), 1.0)']] },
+      { label: 'bright', edits: [['vec4(vec3(n), 1.0)', 'vec4(vec3(n + 0.02), 1.0)']] },
+      { label: 'dark', edits: [['vec4(vec3(n), 1.0)', 'vec4(vec3(n * 0.96), 1.0)']] },
+      { label: 'tint', edits: [['vec4(vec3(n), 1.0)', 'vec4(vec3(n) * vec3(1.0, 0.98, 0.95), 1.0)']] },
+      { label: 'gamma', edits: [['vec4(vec3(n), 1.0)', 'vec4(vec3(pow(n, 1.05)), 1.0)']] },
+      { label: 'range', edits: [['vec4(vec3(n), 1.0)', 'vec4(vec3(n * 0.9 + 0.05), 1.0)']] },
+      { label: 'quintic', edits: [['vec2 u = f * f * (3.0 - 2.0 * f);', 'vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);']] },
+      { label: 'low-bits', edits: [['float(h >> 8) / 16777216.0', 'float(h >> 16) / 65536.0']] },
+      { label: 'scale-tiny', edits: [['uv * 4.0', 'uv * 4.03']] },
+      { label: 'pixel-shift', edits: [['uv * 4.0', 'uv * 4.0 + 0.01']] },
+    ];
+    return {
+      slug: 'value-noise',
+      others: ['white-noise', 'fbm-clouds', 'voronoi', 'radial-gradient'],
+      renames: { uv: 'st', p: 'pos', i: 'cell', f: 'frac', u: 'w', n: 'value' },
+      handCorrect: [
+        {
+          label: 'noise-fn',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  fragColor = vec4(vec3(noise(uv * 4.0)), 1.0);
+}
+`,
+        },
+        {
+          label: 'smoothstep-fade',
+          src: `${HEADER}
+${PCG_GLSL}
+
+float rnd(int x, int y) {
+  return float(pcg(pcg(uint(x)) + uint(y)) >> 8) / 16777216.0;
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 4.0;
+  vec2 cell = floor(p);
+  int x = int(cell.x);
+  int y = int(cell.y);
+  vec2 u = smoothstep(0.0, 1.0, p - cell);
+  float bottom = mix(rnd(x, y), rnd(x + 1, y), u.x);
+  float top = mix(rnd(x, y + 1), rnd(x + 1, y + 1), u.x);
+  fragColor = vec4(vec3(mix(bottom, top, u.y)), 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+${PCG_GLSL}
+
+float corner(uvec2 c) {
+  return float(pcg(pcg(c.x) + c.y) >> 8) / 16777216.0;
+}
+
+void main() {
+  vec2 st = gl_FragCoord.xy - 0.5 * u_resolution;
+  st /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec2 p = st * 4.0;
+  uvec2 i = uvec2(ivec2(floor(p)));
+  vec2 f = fract(p);
+  vec2 w = f * f * (3.0 - 2.0 * f);
+  float a = corner(i);
+  float b = corner(i + uvec2(1u, 0u));
+  float c = corner(i + uvec2(0u, 1u));
+  float d = corner(i + uvec2(1u, 1u));
+  float n = a + (b - a) * w.x + (c - a) * w.y + (a - b - c + d) * w.x * w.y;
+  fragColor = vec4(n, n, n, 1.0);
+}
+`,
+        },
+        {
+          label: 'bit-scale',
+          src: `${HEADER}
+uint pcg(uint v) {
+  uint s = v * 747796405u + 2891336453u;
+  uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+  return (w >> 22u) ^ w;
+}
+
+float lattice(vec2 c) {
+  ivec2 k = ivec2(c);
+  return float(pcg(pcg(uint(k.x)) + uint(k.y)) >> 8u) * (1.0 / 16777216.0);
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = 4.0 * uv;
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = (3.0 - 2.0 * f) * f * f;
+  float n = mix(
+    mix(lattice(i), lattice(i + vec2(1.0, 0.0)), u.x),
+    mix(lattice(i + vec2(0.0, 1.0)), lattice(i + vec2(1.0, 1.0)), u.x),
+    u.y);
+  fragColor = vec4(vec3(n), 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'other-seed', edits: [['pcg(pcg(uint(c.x)) + uint(c.y))', 'pcg(pcg(uint(c.x) + 7u) + uint(c.y))']] },
+        { label: 'swapped-xy', edits: [['pcg(pcg(uint(c.x)) + uint(c.y))', 'pcg(pcg(uint(c.y)) + uint(c.x))']] },
+        { label: 'big-cells', edits: [['uv * 4.0', 'uv * 2.0']] },
+        { label: 'small-cells', edits: [['uv * 4.0', 'uv * 8.0']] },
+        { label: 'blocky', edits: [['float n = mix(mix(a, b, u.x), mix(c, d, u.x), u.y);', 'float n = a;']] },
+      ],
+      handAdversarial: [
+        { label: 'corner-table', src: valueNoiseCornerTable() },
+        {
+          label: 'sin-hash-default',
+          src: noiseSinHash(`${VALUE_NOISE_GLSL}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  fragColor = vec4(vec3(noise(uv * 4.0)), 1.0);
+}
+`),
+        },
+      ],
+      injectMild: injectFrom(almost, 'contrast'),
+      injectBorderline: [{ label: 'inject-zoom', edits: [['uv * 4.0', 'uv * 4.4']] }],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── voronoi (intermediate, track 5, colored, integer hash) ──────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'soft', edits: [['col = 0.25 + 0.7 * col;', 'col = 0.26 + 0.68 * col;']] },
+      { label: 'bright', edits: [['col = 0.25 + 0.7 * col;', 'col = 0.27 + 0.7 * col;']] },
+      { label: 'dim', edits: [['vec4(col, 1.0)', 'vec4(col * 0.97, 1.0)']] },
+      { label: 'tint', edits: [['vec4(col, 1.0)', 'vec4(col * vec3(1.0, 0.98, 0.96), 1.0)']] },
+      { label: 'gamma', edits: [['vec4(col, 1.0)', 'vec4(pow(col, vec3(1.05)), 1.0)']] },
+      { label: 'quantize', edits: [['vec4(col, 1.0)', 'vec4(floor(col * 32.0) / 32.0 + 1.0 / 64.0, 1.0)']] },
+      {
+        label: 'desaturate',
+        edits: [['col = 0.25 + 0.7 * col;', 'col = 0.25 + 0.7 * col;\n    col = mix(col, vec3(dot(col, vec3(0.333))), 0.08);']],
+      },
+      { label: 'scale-tiny', edits: [['uv * 3.0', 'uv * 3.02']] },
+      { label: 'pixel-shift', edits: [['uv * 3.0', 'uv * 3.0 + 0.006']] },
+      { label: 'jitter-shrink', edits: [['/ 65536.0', '/ 66000.0']] },
+    ];
+    return {
+      slug: 'voronoi',
+      others: ['worley-cracks', 'white-noise'],
+      renames: { uv: 'st', p: 'pos', best: 'minDist', bestHash: 'winner', point: 'site', col: 'color' },
+      handCorrect: [
+        {
+          label: 'site-fn',
+          src: `${HEADER}
+${PCG_GLSL}
+
+vec2 site(ivec2 c, out uint h) {
+  h = pcg(pcg(uint(c.x)) + uint(c.y));
+  return vec2(c) + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 p = uv * 3.0;
+  ivec2 i = ivec2(floor(p));
+  float best = 1e9;
+  uint winner = 0u;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      uint h;
+      vec2 s = site(i + ivec2(x, y), h);
+      float d = length(p - s);
+      if (d < best) {
+        best = d;
+        winner = h;
+      }
+    }
+  }
+  uint k = pcg(winner);
+  vec3 col = vec3(float(k & 0xFFu), float((k >> 8) & 0xFFu), float((k >> 16) & 0xFFu)) / 255.0;
+  fragColor = vec4(0.25 + 0.7 * col, 1.0);
+}
+`,
+        },
+        {
+          label: 'squared-distance',
+          src: `${HEADER}
+${PCG_GLSL}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 3.0;
+  ivec2 i = ivec2(floor(p));
+  float best = 1e9;
+  uint bestHash = 0u;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      ivec2 c = i + ivec2(x, y);
+      uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+      vec2 diff = vec2(c) + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0 - p;
+      float d2 = dot(diff, diff);
+      if (d2 < best) {
+        best = d2;
+        bestHash = h;
+      }
+    }
+  }
+  uint k = pcg(bestHash);
+  vec3 col = vec3(float(k & 0xFFu), float((k >> 8) & 0xFFu), float((k >> 16) & 0xFFu)) / 255.0;
+  fragColor = vec4(0.25 + 0.7 * col, 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+${PCG_GLSL}
+
+void main() {
+  vec2 st = gl_FragCoord.xy - 0.5 * u_resolution;
+  st /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec2 p = 3.0 * st;
+  ivec2 cell = ivec2(floor(p));
+  float nearest = 1e9;
+  uint id = 0u;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      ivec2 c = cell + ivec2(x, y);
+      uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+      vec2 jitter = vec2(float(h & 0xFFFFu), float(h >> 16)) * (1.0 / 65536.0);
+      float d = distance(p, vec2(c) + jitter);
+      if (d < nearest) {
+        nearest = d;
+        id = h;
+      }
+    }
+  }
+  uint k = pcg(id);
+  vec3 rgb = vec3(float(k & 0xFFu), float((k >> 8) & 0xFFu), float((k >> 16) & 0xFFu)) / 255.0;
+  fragColor = vec4(rgb * 0.7 + 0.25, 1.0);
+}
+`,
+        },
+        {
+          label: 'color-fn',
+          src: `${HEADER}
+${PCG_GLSL}
+
+vec3 cellColor(uint h) {
+  uint k = pcg(h);
+  uvec3 bytes = uvec3(k, k >> 8, k >> 16) & 0xFFu;
+  return 0.25 + 0.7 * vec3(bytes) / 255.0;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 p = uv * 3.0;
+  ivec2 i = ivec2(floor(p));
+  float best = 1e9;
+  uint bestHash = 0u;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      ivec2 c = i + ivec2(x, y);
+      uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+      vec2 point = vec2(c) + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0;
+      float d = distance(p, point);
+      if (d < best) {
+        best = d;
+        bestHash = h;
+      }
+    }
+  }
+  fragColor = vec4(cellColor(bestHash), 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'other-seed', edits: [['pcg(pcg(uint(c.x)) + uint(c.y))', 'pcg(pcg(uint(c.x) + 7u) + uint(c.y))']] },
+        { label: 'swapped-xy', edits: [['pcg(pcg(uint(c.x)) + uint(c.y))', 'pcg(pcg(uint(c.y)) + uint(c.x))']] },
+        { label: 'big-cells', edits: [['uv * 3.0', 'uv * 1.5']] },
+        { label: 'small-cells', edits: [['uv * 3.0', 'uv * 6.0']] },
+        { label: 'distance-shade', edits: [['vec4(col, 1.0)', 'vec4(vec3(best), 1.0)']] },
+        { label: 'other-palette', edits: [['uint k = pcg(bestHash);', 'uint k = pcg(bestHash + 1u);']] },
+        {
+          label: 'square-cells',
+          edits: [['vec2 point = vec2(c) + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0;', 'vec2 point = vec2(c) + 0.5;']],
+        },
+      ],
+      handAdversarial: [
+        {
+          label: 'sin-hash-default',
+          src: noiseSinHash(`void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 3.0;
+  ivec2 i = ivec2(floor(p));
+  float best = 1e9;
+  uint bestHash = 0u;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      ivec2 c = i + ivec2(x, y);
+      uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+      vec2 point = vec2(c) + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0;
+      float d = distance(p, point);
+      if (d < best) {
+        best = d;
+        bestHash = h;
+      }
+    }
+  }
+  uint k = pcg(bestHash);
+  vec3 col = vec3(float(k & 0xFFu), float((k >> 8) & 0xFFu), float((k >> 16) & 0xFFu)) / 255.0;
+  fragColor = vec4(0.25 + 0.7 * col, 1.0);
+}
+`),
+        },
+      ],
+      injectMild: injectFrom(almost, 'soft'),
+      injectBorderline: [
+        { label: 'inject-zoom', edits: [['uv * 3.0', 'uv * 3.3']] },
+        { label: 'inject-pastel', edits: [['col = 0.25 + 0.7 * col;', 'col = 0.45 + 0.5 * col;']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── worley-cracks (advanced, track 5, colored, integer hash) ────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'stone-shift', edits: [['vec3(0.84, 0.79, 0.70)', 'vec3(0.85, 0.78, 0.71)']] },
+      { label: 'stone-light', edits: [['vec3(0.84, 0.79, 0.70)', 'vec3(0.86, 0.81, 0.72)']] },
+      { label: 'dark-lift', edits: [['vec3(0.10, 0.08, 0.07)', 'vec3(0.13, 0.11, 0.10)']] },
+      { label: 'width-up', edits: [['smoothstep(0.0, 0.1, f2 - f1)', 'smoothstep(0.0, 0.106, f2 - f1)']] },
+      { label: 'width-down', edits: [['smoothstep(0.0, 0.1, f2 - f1)', 'smoothstep(0.0, 0.094, f2 - f1)']] },
+      { label: 'crisp', edits: [['smoothstep(0.0, 0.1, f2 - f1)', 'smoothstep(0.01, 0.09, f2 - f1)']] },
+      { label: 'linear-fade', edits: [['1.0 - smoothstep(0.0, 0.1, f2 - f1)', '1.0 - clamp((f2 - f1) / 0.1, 0.0, 1.0)']] },
+      { label: 'scale-tiny', edits: [['uv * 4.0', 'uv * 4.02']] },
+      { label: 'dim', edits: [['vec4(mix(stone, dark, crack), 1.0)', 'vec4(mix(stone, dark, crack) * 0.97, 1.0)']] },
+      {
+        label: 'tint',
+        edits: [['vec4(mix(stone, dark, crack), 1.0)', 'vec4(mix(stone, dark, crack) * vec3(1.0, 0.98, 0.96), 1.0)']],
+      },
+    ];
+    return {
+      slug: 'worley-cracks',
+      others: ['voronoi', 'marble', 'value-noise'],
+      renames: { uv: 'st', p: 'pos', f1: 'nearest', f2: 'second', crack: 'edge', stone: 'base', dark: 'ink' },
+      handCorrect: [
+        {
+          label: 'min-max',
+          src: `${HEADER}
+${PCG_GLSL}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 p = uv * 4.0;
+  ivec2 i = ivec2(floor(p));
+  float f1 = 1e9;
+  float f2 = 1e9;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      ivec2 c = i + ivec2(x, y);
+      uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+      float d = distance(p, vec2(c) + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0);
+      f2 = min(f2, max(f1, d));
+      f1 = min(f1, d);
+    }
+  }
+  float crack = 1.0 - smoothstep(0.0, 0.1, f2 - f1);
+  fragColor = vec4(mix(vec3(0.84, 0.79, 0.70), vec3(0.10, 0.08, 0.07), crack), 1.0);
+}
+`,
+        },
+        {
+          label: 'squared-then-sqrt',
+          src: `${HEADER}
+${PCG_GLSL}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 4.0;
+  ivec2 i = ivec2(floor(p));
+  float a = 1e9;
+  float b = 1e9;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      ivec2 c = i + ivec2(x, y);
+      uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+      vec2 r = vec2(c) + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0 - p;
+      float d2 = dot(r, r);
+      if (d2 < a) {
+        b = a;
+        a = d2;
+      } else if (d2 < b) {
+        b = d2;
+      }
+    }
+  }
+  float gap = sqrt(b) - sqrt(a);
+  float crack = 1.0 - smoothstep(0.0, 0.1, gap);
+  fragColor = vec4(mix(vec3(0.84, 0.79, 0.70), vec3(0.10, 0.08, 0.07), crack), 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+${PCG_GLSL}
+
+const vec3 STONE = vec3(0.84, 0.79, 0.70);
+const vec3 DARK = vec3(0.10, 0.08, 0.07);
+
+void main() {
+  vec2 st = gl_FragCoord.xy - 0.5 * u_resolution;
+  st /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec2 p = 4.0 * st;
+  ivec2 cell = ivec2(floor(p));
+  float nearest = 1e9;
+  float second = 1e9;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      ivec2 c = cell + ivec2(x, y);
+      uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+      vec2 jitter = vec2(float(h & 0xFFFFu), float(h >> 16)) * (1.0 / 65536.0);
+      float d = length(p - vec2(c) - jitter);
+      if (d < nearest) {
+        second = nearest;
+        nearest = d;
+      } else if (d < second) {
+        second = d;
+      }
+    }
+  }
+  float m = 1.0 - smoothstep(0.0, 0.1, second - nearest);
+  fragColor = vec4(STONE + (DARK - STONE) * m, 1.0);
+}
+`,
+        },
+        {
+          label: 'border-fn',
+          src: `${HEADER}
+${PCG_GLSL}
+
+vec2 featurePoint(ivec2 c) {
+  uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+  return vec2(c) + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0;
+}
+
+float border(vec2 p) {
+  ivec2 i = ivec2(floor(p));
+  float f1 = 1e9;
+  float f2 = 1e9;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      float d = distance(p, featurePoint(i + ivec2(x, y)));
+      if (d < f1) {
+        f2 = f1;
+        f1 = d;
+      } else if (d < f2) {
+        f2 = d;
+      }
+    }
+  }
+  return f2 - f1;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float crack = 1.0 - smoothstep(0.0, 0.1, border(uv * 4.0));
+  fragColor = vec4(mix(vec3(0.84, 0.79, 0.70), vec3(0.10, 0.08, 0.07), crack), 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'other-seed', edits: [['pcg(pcg(uint(c.x)) + uint(c.y))', 'pcg(pcg(uint(c.x) + 7u) + uint(c.y))']] },
+        { label: 'swapped-xy', edits: [['pcg(pcg(uint(c.x)) + uint(c.y))', 'pcg(pcg(uint(c.y)) + uint(c.x))']] },
+        { label: 'big-cells', edits: [['uv * 4.0', 'uv * 2.0']] },
+        { label: 'f1-spots', edits: [['smoothstep(0.0, 0.1, f2 - f1)', 'smoothstep(0.0, 0.1, f1)']] },
+        { label: 'thick', edits: [['smoothstep(0.0, 0.1, f2 - f1)', 'smoothstep(0.0, 0.4, f2 - f1)']] },
+        { label: 'swapped-colors', edits: [['mix(stone, dark, crack)', 'mix(dark, stone, crack)']] },
+      ],
+      handAdversarial: [
+        {
+          label: 'sin-hash-default',
+          src: noiseSinHash(`void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 4.0;
+  ivec2 i = ivec2(floor(p));
+  float f1 = 1e9;
+  float f2 = 1e9;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      ivec2 c = i + ivec2(x, y);
+      uint h = pcg(pcg(uint(c.x)) + uint(c.y));
+      vec2 point = vec2(c) + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0;
+      float d = distance(p, point);
+      if (d < f1) {
+        f2 = f1;
+        f1 = d;
+      } else if (d < f2) {
+        f2 = d;
+      }
+    }
+  }
+  float crack = 1.0 - smoothstep(0.0, 0.1, f2 - f1);
+  fragColor = vec4(mix(vec3(0.84, 0.79, 0.70), vec3(0.10, 0.08, 0.07), crack), 1.0);
+}
+`),
+        },
+      ],
+      injectMild: injectFrom(almost, 'stone-shift'),
+      injectBorderline: [
+        { label: 'inject-wide', edits: [['smoothstep(0.0, 0.1, f2 - f1)', 'smoothstep(0.0, 0.16, f2 - f1)']] },
+        { label: 'inject-zoom', edits: [['uv * 4.0', 'uv * 4.4']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── fbm-clouds (advanced, track 5, colored, integer hash) ───────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'sky-shift', edits: [['vec3(0.25, 0.50, 0.90)', 'vec3(0.26, 0.51, 0.89)']] },
+      { label: 'sky-deep', edits: [['vec3(0.25, 0.50, 0.90)', 'vec3(0.24, 0.48, 0.90)']] },
+      { label: 'cloud-warm', edits: [['vec3 cloud = vec3(1.0);', 'vec3 cloud = vec3(1.0, 0.99, 0.97);']] },
+      {
+        label: 'six-octaves',
+        edits: [
+          ['o < 5', 'o < 6'],
+          ['sum / 0.96875', 'sum / 0.984375'],
+        ],
+      },
+      { label: 'no-normalize', edits: [['return sum / 0.96875;', 'return sum;']] },
+      { label: 'ramp-soft', edits: [['smoothstep(0.35, 0.75, n)', 'smoothstep(0.33, 0.77, n)']] },
+      { label: 'ramp-shift', edits: [['smoothstep(0.35, 0.75, n)', 'smoothstep(0.36, 0.76, n)']] },
+      { label: 'scale-tiny', edits: [['fbm(uv * 2.0)', 'fbm(uv * 2.02)']] },
+      { label: 'lacunarity', edits: [['p *= 2.0;', 'p *= 2.01;']] },
+      { label: 'dim', edits: [['smoothstep(0.35, 0.75, n)), 1.0)', 'smoothstep(0.35, 0.75, n)) * 0.985, 1.0)']] },
+    ];
+    return {
+      slug: 'fbm-clouds',
+      others: ['value-noise', 'marble', 'solid-color'],
+      renames: { uv: 'st', sum: 'total', amp: 'weight', n: 'density', sky: 'blue', cloud: 'white', o: 'octave' },
+      handCorrect: [
+        {
+          label: 'unrolled',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 p = uv * 2.0;
+  float n = 0.5 * noise(p) + 0.25 * noise(p * 2.0) + 0.125 * noise(p * 4.0)
+          + 0.0625 * noise(p * 8.0) + 0.03125 * noise(p * 16.0);
+  n /= 0.96875;
+  fragColor = vec4(mix(vec3(0.25, 0.50, 0.90), vec3(1.0), smoothstep(0.35, 0.75, n)), 1.0);
+}
+`,
+        },
+        {
+          label: 'exp2-weights',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+float fbm(vec2 p) {
+  float sum = 0.0;
+  for (int o = 0; o < 5; o++) {
+    sum += exp2(-float(o + 1)) * noise(p * exp2(float(o)));
+  }
+  return sum / (1.0 - exp2(-5.0));
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float n = fbm(uv * 2.0);
+  fragColor = vec4(mix(vec3(0.25, 0.50, 0.90), vec3(1.0), smoothstep(0.35, 0.75, n)), 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+const vec3 SKY = vec3(0.25, 0.50, 0.90);
+
+void main() {
+  vec2 st = gl_FragCoord.xy - 0.5 * u_resolution;
+  st /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec2 p = 2.0 * st;
+  float total = 0.0;
+  float weight = 0.5;
+  float norm = 0.0;
+  for (int o = 0; o < 5; o++) {
+    total += weight * noise(p);
+    norm += weight;
+    p *= 2.0;
+    weight *= 0.5;
+  }
+  float c = smoothstep(0.35, 0.75, total / norm);
+  fragColor = vec4(SKY + (vec3(1.0) - SKY) * c, 1.0);
+}
+`,
+        },
+        {
+          label: 'ramp-fn',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+float fbm(vec2 p) {
+  float sum = 0.0;
+  float amp = 0.5;
+  for (int o = 0; o < 5; o++) {
+    sum += amp * noise(p);
+    p *= 2.0;
+    amp *= 0.5;
+  }
+  return sum / 0.96875;
+}
+
+vec3 skyRamp(float n) {
+  return mix(vec3(0.25, 0.50, 0.90), vec3(1.0), smoothstep(0.35, 0.75, n));
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  fragColor = vec4(skyRamp(fbm(2.0 * uv)), 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        {
+          label: 'one-octave',
+          edits: [
+            ['o < 5', 'o < 1'],
+            ['sum / 0.96875', 'sum / 0.5'],
+          ],
+        },
+        {
+          label: 'two-octaves',
+          edits: [
+            ['o < 5', 'o < 2'],
+            ['sum / 0.96875', 'sum / 0.75'],
+          ],
+        },
+        { label: 'other-seed', edits: [['pcg(pcg(uint(c.x)) + uint(c.y))', 'pcg(pcg(uint(c.x) + 7u) + uint(c.y))']] },
+        { label: 'big-scale', edits: [['fbm(uv * 2.0)', 'fbm(uv * 1.0)']] },
+        { label: 'small-scale', edits: [['fbm(uv * 2.0)', 'fbm(uv * 4.0)']] },
+        { label: 'swapped-colors', edits: [['mix(sky, cloud,', 'mix(cloud, sky,']] },
+      ],
+      handAdversarial: [
+        {
+          label: 'sin-hash-default',
+          src: noiseSinHash(`${VALUE_NOISE_GLSL}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 2.0;
+  float n = 0.0;
+  float amp = 0.5;
+  for (int o = 0; o < 5; o++) {
+    n += amp * noise(p);
+    p *= 2.0;
+    amp *= 0.5;
+  }
+  n /= 0.96875;
+  fragColor = vec4(mix(vec3(0.25, 0.50, 0.90), vec3(1.0), smoothstep(0.35, 0.75, n)), 1.0);
+}
+`),
+        },
+      ],
+      injectMild: injectFrom(almost, 'sky-shift'),
+      injectBorderline: [
+        { label: 'inject-overcast', edits: [['smoothstep(0.35, 0.75, n)', 'smoothstep(0.28, 0.68, n)']] },
+        { label: 'inject-zoom', edits: [['fbm(uv * 2.0)', 'fbm(uv * 2.25)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── marble (advanced, track 5, colored, integer hash) ───────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'stone-shift', edits: [['vec3(0.93, 0.92, 0.88)', 'vec3(0.94, 0.92, 0.87)']] },
+      { label: 'slate-shift', edits: [['vec3(0.20, 0.25, 0.35)', 'vec3(0.22, 0.26, 0.36)']] },
+      { label: 'slate-blue', edits: [['vec3(0.20, 0.25, 0.35)', 'vec3(0.20, 0.25, 0.38)']] },
+      { label: 'power-up', edits: [['abs(wave), 4.0)', 'abs(wave), 4.3)']] },
+      { label: 'power-down', edits: [['abs(wave), 4.0)', 'abs(wave), 3.7)']] },
+      { label: 'warp-tiny', edits: [['6.0 * fbm', '6.03 * fbm']] },
+      { label: 'freq-tiny', edits: [['* 3.0 + 6.0', '* 3.02 + 6.0']] },
+      {
+        label: 'five-octaves',
+        edits: [
+          ['o < 4', 'o < 5'],
+          ['sum / 0.9375', 'sum / 0.96875'],
+        ],
+      },
+      { label: 'dim', edits: [['vec4(mix(stone, slate, vein), 1.0)', 'vec4(mix(stone, slate, vein) * 0.97, 1.0)']] },
+      {
+        label: 'tint',
+        edits: [['vec4(mix(stone, slate, vein), 1.0)', 'vec4(mix(stone, slate, vein) * vec3(1.0, 0.98, 0.96), 1.0)']],
+      },
+    ];
+    return {
+      slug: 'marble',
+      others: ['fbm-clouds', 'zigzag', 'worley-cracks'],
+      renames: { uv: 'st', wave: 'phase', vein: 'streak', stone: 'base', slate: 'veinColor', sum: 'total', amp: 'weight' },
+      handCorrect: [
+        {
+          label: 'unrolled-fbm',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 q = uv * 1.5;
+  float f = (0.5 * noise(q) + 0.25 * noise(q * 2.0) + 0.125 * noise(q * 4.0) + 0.0625 * noise(q * 8.0)) / 0.9375;
+  float wave = sin((uv.x + uv.y * 0.5) * 3.0 + 6.0 * f);
+  float vein = pow(1.0 - abs(wave), 4.0);
+  fragColor = vec4(mix(vec3(0.93, 0.92, 0.88), vec3(0.20, 0.25, 0.35), vein), 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+const vec3 STONE = vec3(0.93, 0.92, 0.88);
+const vec3 SLATE = vec3(0.20, 0.25, 0.35);
+
+float fbm(vec2 p) {
+  float total = 0.0;
+  float weight = 0.5;
+  for (int o = 0; o < 4; o++) {
+    total += weight * noise(p);
+    p *= 2.0;
+    weight *= 0.5;
+  }
+  return total / 0.9375;
+}
+
+void main() {
+  vec2 st = gl_FragCoord.xy - 0.5 * u_resolution;
+  st /= 0.5 * min(u_resolution.x, u_resolution.y);
+  float phase = 3.0 * dot(st, vec2(1.0, 0.5)) + 6.0 * fbm(1.5 * st);
+  float v = pow(1.0 - abs(sin(phase)), 4.0);
+  fragColor = vec4(STONE + (SLATE - STONE) * v, 1.0);
+}
+`,
+        },
+        {
+          label: 'vein-fn',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+float fbm(vec2 p) {
+  float sum = 0.0;
+  float amp = 0.5;
+  for (int o = 0; o < 4; o++) {
+    sum += amp * noise(p);
+    p *= 2.0;
+    amp *= 0.5;
+  }
+  return sum / 0.9375;
+}
+
+float veins(vec2 uv) {
+  float wave = sin((uv.x + uv.y * 0.5) * 3.0 + 6.0 * fbm(uv * 1.5));
+  return pow(1.0 - abs(wave), 4.0);
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  fragColor = vec4(mix(vec3(0.93, 0.92, 0.88), vec3(0.20, 0.25, 0.35), veins(uv)), 1.0);
+}
+`,
+        },
+        {
+          label: 'square-twice',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 p = uv * 1.5;
+  float sum = 0.0;
+  float amp = 0.5;
+  for (int o = 0; o < 4; o++) {
+    sum += amp * noise(p);
+    p *= 2.0;
+    amp *= 0.5;
+  }
+  float wave = sin((uv.x + uv.y * 0.5) * 3.0 + 6.0 * (sum / 0.9375));
+  float a = 1.0 - abs(wave);
+  a *= a;
+  a *= a;
+  vec3 stone = vec3(0.93, 0.92, 0.88);
+  fragColor = vec4(stone + (vec3(0.20, 0.25, 0.35) - stone) * a, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'other-seed', edits: [['pcg(pcg(uint(c.x)) + uint(c.y))', 'pcg(pcg(uint(c.x) + 7u) + uint(c.y))']] },
+        { label: 'no-warp', edits: [[' + 6.0 * fbm(uv * 1.5)', '']] },
+        { label: 'strong-warp', edits: [['6.0 * fbm', '12.0 * fbm']] },
+        { label: 'thick-veins', edits: [['abs(wave), 4.0)', 'abs(wave), 1.0)']] },
+        { label: 'other-angle', edits: [['(uv.x + uv.y * 0.5)', '(uv.y - uv.x * 0.5)']] },
+        { label: 'swapped-colors', edits: [['mix(stone, slate, vein)', 'mix(slate, stone, vein)']] },
+      ],
+      handAdversarial: [
+        {
+          label: 'sin-hash-default',
+          src: noiseSinHash(`${VALUE_NOISE_GLSL}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 1.5;
+  float f = 0.0;
+  float amp = 0.5;
+  for (int o = 0; o < 4; o++) {
+    f += amp * noise(p);
+    p *= 2.0;
+    amp *= 0.5;
+  }
+  float wave = sin((uv.x + uv.y * 0.5) * 3.0 + 6.0 * f / 0.9375);
+  float vein = pow(1.0 - abs(wave), 4.0);
+  fragColor = vec4(mix(vec3(0.93, 0.92, 0.88), vec3(0.20, 0.25, 0.35), vein), 1.0);
+}
+`),
+        },
+      ],
+      injectMild: injectFrom(almost, 'slate-shift'),
+      injectBorderline: [
+        { label: 'inject-warp', edits: [['6.0 * fbm', '7.0 * fbm']] },
+        { label: 'inject-thick', edits: [['abs(wave), 4.0)', 'abs(wave), 2.5)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── raymarched-box (advanced, track 6, blur) ────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'light-x', edits: [['vec3(0.5, 0.8, 0.6)', 'vec3(0.55, 0.8, 0.6)']] },
+      { label: 'light-move', edits: [['vec3(0.5, 0.8, 0.6)', 'vec3(0.45, 0.85, 0.6)']] },
+      { label: 'camera-back', edits: [['vec3 ro = vec3(0.0, 0.0, 3.0);', 'vec3 ro = vec3(0.0, 0.0, 3.05);']] },
+      { label: 'camera-side', edits: [['vec3 ro = vec3(0.0, 0.0, 3.0);', 'vec3 ro = vec3(0.02, 0.0, 3.0);']] },
+      { label: 'albedo', edits: [['vec3(0.90, 0.55, 0.25)', 'vec3(0.92, 0.55, 0.24)']] },
+      { label: 'ambient', edits: [['(0.15 + 0.85 * diff)', '(0.18 + 0.82 * diff)']] },
+      { label: 'background', edits: [['vec3(0.06, 0.07, 0.10)', 'vec3(0.065, 0.075, 0.105)']] },
+      { label: 'turn-tiny', edits: [['rot(p.xz, 0.6)', 'rot(p.xz, 0.62)']] },
+      { label: 'size-up', edits: [['vec3(0.8, 0.6, 0.5)', 'vec3(0.81, 0.61, 0.51)']] },
+      {
+        label: 'rounded',
+        edits: [['return boxSDF(p, vec3(0.8, 0.6, 0.5));', 'return boxSDF(p, vec3(0.78, 0.58, 0.48)) - 0.02;']],
+      },
+    ];
+    return {
+      slug: 'raymarched-box',
+      others: ['raymarched-sphere', 'raymarched-torus', 'raymarched-capsule', 'hard-shadow'],
+      renames: { ro: 'origin', rd: 'dir', t: 'dist', hit: 'found', color: 'col', diff: 'lambert' },
+      handCorrect: [
+        { label: 'rotation-matrix', src: marchVariant(BOX_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(BOX_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(BOX_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(BOX_SCENE, 'tetra') },
+      ],
+      almost,
+      wrong: [
+        { label: 'sphere', edits: [['return boxSDF(p, vec3(0.8, 0.6, 0.5));', 'return length(p) - 0.7;']] },
+        {
+          label: 'unturned',
+          edits: [
+            ['p.xz = rot(p.xz, 0.6);', ''],
+            ['p.yz = rot(p.yz, 0.5);', ''],
+          ],
+        },
+        { label: 'tall', edits: [['vec3(0.8, 0.6, 0.5)', 'vec3(0.4, 0.9, 0.4)']] },
+        { label: 'blue', edits: [['vec3(0.90, 0.55, 0.25)', 'vec3(0.25, 0.5, 0.9)']] },
+        { label: 'flat', edits: [[' * (0.15 + 0.85 * diff)', '']] },
+        { label: 'backlit', edits: [['vec3(0.5, 0.8, 0.6)', 'vec3(-0.5, -0.8, 0.6)']] },
+      ],
+      injectMild: injectFrom(almost, 'light-x', 'albedo'),
+      injectBorderline: [
+        { label: 'inject-big', edits: [['vec3(0.8, 0.6, 0.5)', 'vec3(0.9, 0.7, 0.6)']] },
+        { label: 'inject-turn', edits: [['rot(p.xz, 0.6)', 'rot(p.xz, 0.8)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── raymarched-torus (advanced, track 6, blur) ──────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'light-x', edits: [['vec3(-0.4, 0.7, 0.6)', 'vec3(-0.45, 0.7, 0.6)']] },
+      { label: 'light-move', edits: [['vec3(-0.4, 0.7, 0.6)', 'vec3(-0.35, 0.75, 0.6)']] },
+      { label: 'camera-back', edits: [['vec3 ro = vec3(0.0, 0.0, 3.0);', 'vec3 ro = vec3(0.0, 0.0, 3.05);']] },
+      { label: 'albedo', edits: [['vec3(0.90, 0.35, 0.55)', 'vec3(0.92, 0.35, 0.53)']] },
+      { label: 'ambient', edits: [['(0.15 + 0.85 * diff)', '(0.18 + 0.82 * diff)']] },
+      { label: 'background', edits: [['vec3(0.09, 0.06, 0.10)', 'vec3(0.095, 0.065, 0.105)']] },
+      { label: 'tilt-tiny', edits: [['rot(p.yz, 1.0)', 'rot(p.yz, 1.02)']] },
+      { label: 'tube-up', edits: [['vec2(0.8, 0.3)', 'vec2(0.8, 0.31)']] },
+      { label: 'spec-exp', edits: [['32.0) * 0.5', '28.0) * 0.5']] },
+      { label: 'spec-strength', edits: [['32.0) * 0.5', '32.0) * 0.4']] },
+    ];
+    return {
+      slug: 'raymarched-torus',
+      others: ['raymarched-sphere', 'raymarched-box', 'ring', 'raymarched-capsule'],
+      renames: { ro: 'origin', rd: 'dir', t: 'dist', hit: 'found', color: 'col', diff: 'lambert' },
+      handCorrect: [
+        { label: 'rotation-matrix', src: marchVariant(TORUS_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(TORUS_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(TORUS_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(TORUS_SCENE, 'tetra') },
+      ],
+      almost,
+      wrong: [
+        { label: 'sphere', edits: [['return torusSDF(p, vec2(0.8, 0.3));', 'return length(p) - 0.8;']] },
+        { label: 'edge-on', edits: [['rot(p.yz, 1.0)', 'rot(p.yz, 0.0)']] },
+        { label: 'thin-tube', edits: [['vec2(0.8, 0.3)', 'vec2(0.8, 0.1)']] },
+        { label: 'fat-tube', edits: [['vec2(0.8, 0.3)', 'vec2(0.6, 0.5)']] },
+        { label: 'green', edits: [['vec3(0.90, 0.35, 0.55)', 'vec3(0.3, 0.85, 0.4)']] },
+        { label: 'backlit', edits: [['vec3(-0.4, 0.7, 0.6)', 'vec3(0.4, -0.7, -0.6)']] },
+      ],
+      injectMild: injectFrom(almost, 'light-x', 'albedo'),
+      injectBorderline: [
+        { label: 'inject-fat', edits: [['vec2(0.8, 0.3)', 'vec2(0.8, 0.38)']] },
+        { label: 'inject-tilt', edits: [['rot(p.yz, 1.0)', 'rot(p.yz, 1.25)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── raymarched-capsule (advanced, track 6, blur) ────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'light-x', edits: [['vec3(0.7, 0.6, 0.5)', 'vec3(0.75, 0.6, 0.5)']] },
+      { label: 'light-move', edits: [['vec3(0.7, 0.6, 0.5)', 'vec3(0.65, 0.65, 0.5)']] },
+      { label: 'camera-back', edits: [['vec3 ro = vec3(0.0, 0.0, 3.0);', 'vec3 ro = vec3(0.0, 0.0, 3.05);']] },
+      { label: 'albedo', edits: [['vec3(0.35, 0.80, 0.55)', 'vec3(0.36, 0.82, 0.54)']] },
+      { label: 'ambient', edits: [['(0.15 + 0.85 * diff)', '(0.18 + 0.82 * diff)']] },
+      { label: 'background', edits: [['vec3(0.05, 0.09, 0.07)', 'vec3(0.055, 0.095, 0.075)']] },
+      { label: 'radius-up', edits: [['0.0), 0.35);', '0.0), 0.36);']] },
+      { label: 'rim-power', edits: [['0.0), 3.0)', '0.0), 3.3)']] },
+      { label: 'rim-strength', edits: [['rim * 0.35', 'rim * 0.3']] },
+      { label: 'longer', edits: [['vec3(0.8, 0.5, 0.0), 0.35', 'vec3(0.82, 0.51, 0.0), 0.35']] },
+    ];
+    return {
+      slug: 'raymarched-capsule',
+      others: ['line-segment', 'raymarched-sphere', 'raymarched-box', 'raymarched-torus'],
+      renames: { ro: 'origin', rd: 'dir', t: 'dist', hit: 'found', color: 'col', diff: 'lambert', rim: 'fresnel' },
+      handCorrect: [
+        { label: 'segment-inline', src: marchVariant(CAPSULE_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(CAPSULE_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(CAPSULE_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(CAPSULE_SCENE, 'tetra') },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        {
+          label: 'sphere',
+          edits: [['return capsuleSDF(p, vec3(-0.8, -0.5, 0.0), vec3(0.8, 0.5, 0.0), 0.35);', 'return length(p) - 0.6;']],
+        },
+        { label: 'vertical', edits: [['vec3(-0.8, -0.5, 0.0), vec3(0.8, 0.5, 0.0)', 'vec3(0.0, -0.8, 0.0), vec3(0.0, 0.8, 0.0)']] },
+        { label: 'thick', edits: [['0.0), 0.35);', '0.0), 0.6);']] },
+        { label: 'red', edits: [['vec3(0.35, 0.80, 0.55)', 'vec3(0.85, 0.25, 0.2)']] },
+        { label: 'backlit', edits: [['vec3(0.7, 0.6, 0.5)', 'vec3(-0.7, -0.6, -0.5)']] },
+      ],
+      injectMild: injectFrom(almost, 'light-x', 'albedo'),
+      injectBorderline: [
+        { label: 'inject-fat', edits: [['0.0), 0.35);', '0.0), 0.42);']] },
+        { label: 'inject-steep', edits: [['vec3(-0.8, -0.5, 0.0), vec3(0.8, 0.5, 0.0)', 'vec3(-0.7, -0.65, 0.0), vec3(0.7, 0.65, 0.0)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── hard-shadow (advanced, track 6, blur) ───────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'light-x', edits: [['vec3(-1.8, 2.2, 0.4)', 'vec3(-1.75, 2.2, 0.4)']] },
+      { label: 'light-move', edits: [['vec3(-1.8, 2.2, 0.4)', 'vec3(-1.8, 2.25, 0.42)']] },
+      { label: 'camera-back', edits: [['vec3(0.0, 3.2, 4.0)', 'vec3(0.0, 3.2, 4.08)']] },
+      { label: 'camera-up', edits: [['vec3(0.0, 3.2, 4.0)', 'vec3(0.0, 3.25, 4.0)']] },
+      { label: 'sphere-red', edits: [['vec3(0.85, 0.25, 0.20)', 'vec3(0.87, 0.25, 0.22)']] },
+      { label: 'floor-tone', edits: [['vec3(0.80, 0.78, 0.72)', 'vec3(0.805, 0.78, 0.71)']] },
+      { label: 'ambient', edits: [['(0.15 + 0.85 * diff * shadow)', '(0.17 + 0.83 * diff * shadow)']] },
+      { label: 'focal', edits: [['+ 2.0 * ww', '+ 2.03 * ww']] },
+      { label: 'radius-tiny', edits: [['vec3(0.0, 0.6, 0.0)) - 0.6', 'vec3(0.0, 0.61, 0.0)) - 0.61']] },
+      { label: 'shadow-bias', edits: [['p + n * 0.01', 'p + n * 0.02']] },
+    ];
+    return {
+      slug: 'hard-shadow',
+      others: ['soft-shadow', 'ambient-occlusion', 'raymarched-sphere'],
+      renames: { ro: 'eye', rd: 'dir', ww: 'fwd', uu: 'right', vv: 'up', hit: 'found', shadow: 'lit', albedo: 'base' },
+      handCorrect: [
+        { label: 'map-shade', src: marchVariant(HARD_SHADOW_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(HARD_SHADOW_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(HARD_SHADOW_SCENE, 'early') },
+        {
+          label: 'analytic-shadow',
+          src: marchVariant(
+            {
+              ...HARD_SHADOW_SCENE,
+              helpers: `float sphereDist(vec3 p) {
+  return length(p - vec3(0.0, 0.6, 0.0)) - 0.6;
+}
+
+float map(vec3 p) {
+  return min(sphereDist(p), p.y);
+}
+
+// Ray-sphere test toward the light: the floor never blocks a light from above.
+float shadowRay(vec3 p, vec3 l) {
+  vec3 oc = p - vec3(0.0, 0.6, 0.0);
+  float b = dot(oc, l);
+  float h = b * b - (dot(oc, oc) - 0.36);
+  return (h > 0.0 && -b - sqrt(h) > 0.0) ? 0.0 : 1.0;
+}`,
+            },
+            'tetra',
+          ),
+        },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'no-shadow', edits: [['float shadow = hardShadow(p + n * 0.01, l);', 'float shadow = 1.0;']] },
+        { label: 'light-right', edits: [['vec3(-1.8, 2.2, 0.4)', 'vec3(1.8, 2.2, 0.4)']] },
+        {
+          label: 'box',
+          edits: [['return length(p - vec3(0.0, 0.6, 0.0)) - 0.6;', 'vec3 q = abs(p - vec3(0.0, 0.5, 0.0)) - vec3(0.5);\n    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);']],
+        },
+        { label: 'blue-sphere', edits: [['vec3(0.85, 0.25, 0.20)', 'vec3(0.25, 0.4, 0.85)']] },
+        { label: 'floating', edits: [['vec3(0.0, 0.6, 0.0)) - 0.6', 'vec3(0.0, 1.3, 0.0)) - 0.6']] },
+        { label: 'big-sphere', edits: [['vec3(0.0, 0.6, 0.0)) - 0.6', 'vec3(0.0, 0.95, 0.0)) - 0.95']] },
+      ],
+      handAdversarial: [{ label: 'baked-shadow-mask', src: hardShadowMaskTable() }],
+      injectMild: injectFrom(almost, 'light-x'),
+      injectBorderline: [
+        { label: 'inject-light', edits: [['vec3(-1.8, 2.2, 0.4)', 'vec3(-1.4, 2.2, 0.8)']] },
+        { label: 'inject-radius', edits: [['vec3(0.0, 0.6, 0.0)) - 0.6', 'vec3(0.0, 0.68, 0.0)) - 0.68']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── soft-shadow (advanced, track 6, blur) ───────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'light-x', edits: [['vec3(1.8, 2.2, 0.4)', 'vec3(1.75, 2.2, 0.4)']] },
+      { label: 'light-move', edits: [['vec3(1.8, 2.2, 0.4)', 'vec3(1.8, 2.25, 0.42)']] },
+      { label: 'camera-back', edits: [['vec3(0.0, 3.2, 4.0)', 'vec3(0.0, 3.2, 4.08)']] },
+      { label: 'camera-up', edits: [['vec3(0.0, 3.2, 4.0)', 'vec3(0.0, 3.25, 4.0)']] },
+      { label: 'sphere-yellow', edits: [['vec3(0.95, 0.75, 0.20)', 'vec3(0.95, 0.73, 0.22)']] },
+      { label: 'floor-tone', edits: [['vec3(0.55, 0.62, 0.75)', 'vec3(0.555, 0.62, 0.74)']] },
+      { label: 'ambient', edits: [['(0.15 + 0.85 * diff * shadow)', '(0.17 + 0.83 * diff * shadow)']] },
+      { label: 'k-up', edits: [['8.0 * h / t', '9.0 * h / t']] },
+      { label: 'k-down', edits: [['8.0 * h / t', '7.0 * h / t']] },
+      { label: 'focal', edits: [['+ 2.0 * ww', '+ 2.03 * ww']] },
+    ];
+    return {
+      slug: 'soft-shadow',
+      others: ['hard-shadow', 'ambient-occlusion', 'raymarched-sphere'],
+      renames: { ro: 'eye', rd: 'dir', ww: 'fwd', uu: 'right', vv: 'up', hit: 'found', shadow: 'lit', albedo: 'base', res: 'penumbra' },
+      handCorrect: [
+        { label: 'map-shade', src: marchVariant(SOFT_SHADOW_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(SOFT_SHADOW_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(SOFT_SHADOW_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(SOFT_SHADOW_SCENE, 'tetra') },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'no-shadow', edits: [['float shadow = softShadow(p + n * 0.01, l);', 'float shadow = 1.0;']] },
+        { label: 'overhead', edits: [['vec3(1.8, 2.2, 0.4)', 'vec3(0.2, 3.0, 0.1)']] },
+        { label: 'very-soft', edits: [['8.0 * h / t', '1.5 * h / t']] },
+        { label: 'light-left', edits: [['vec3(1.8, 2.2, 0.4)', 'vec3(-1.8, 2.2, 0.4)']] },
+        { label: 'centered', edits: [['vec3(-0.3, 0.6, 0.0)', 'vec3(0.4, 0.6, 0.0)']] },
+        { label: 'blue-sphere', edits: [['vec3(0.95, 0.75, 0.20)', 'vec3(0.2, 0.35, 0.9)']] },
+      ],
+      injectMild: injectFrom(almost, 'light-x', 'k-up'),
+      injectBorderline: [
+        { label: 'inject-softer', edits: [['8.0 * h / t', '4.0 * h / t']] },
+        { label: 'inject-light', edits: [['vec3(1.8, 2.2, 0.4)', 'vec3(1.4, 2.2, 0.8)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── ambient-occlusion (advanced, track 6, blur) ─────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'strength-up', edits: [['2.5 * occ', '2.7 * occ']] },
+      { label: 'strength-down', edits: [['2.5 * occ', '2.3 * occ']] },
+      { label: 'falloff', edits: [['w *= 0.7;', 'w *= 0.75;']] },
+      { label: 'four-samples', edits: [['i < 5', 'i < 4']] },
+      { label: 'camera-back', edits: [['vec3(0.0, 3.4, 4.5)', 'vec3(0.0, 3.4, 4.58)']] },
+      { label: 'camera-up', edits: [['vec3(0.0, 3.4, 4.5)', 'vec3(0.0, 3.45, 4.5)']] },
+      { label: 'floor-tone', edits: [['vec3(0.78, 0.62, 0.50)', 'vec3(0.79, 0.62, 0.49)']] },
+      { label: 'box-tone', edits: [['vec3(0.45, 0.65, 0.85)', 'vec3(0.47, 0.65, 0.83)']] },
+      { label: 'light-move', edits: [['vec3(0.3, 1.0, 0.6)', 'vec3(0.35, 1.0, 0.55)']] },
+      { label: 'sky-mix', edits: [['0.2 * diff + 0.8 * sky * ao', '0.22 * diff + 0.78 * sky * ao']] },
+    ];
+    return {
+      slug: 'ambient-occlusion',
+      others: ['hard-shadow', 'soft-shadow', 'raymarched-box'],
+      renames: { ro: 'eye', rd: 'dir', ww: 'fwd', uu: 'right', vv: 'up', hit: 'found', occ: 'blocked', ao: 'occlusion', albedo: 'base' },
+      handCorrect: [
+        { label: 'map-shade', src: marchVariant(AO_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(AO_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(AO_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(AO_SCENE, 'tetra') },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'no-ao', edits: [['float ao = ambientOcclusion(p, n);', 'float ao = 1.0;']] },
+        {
+          label: 'swap-objects',
+          edits: [
+            ['p - vec3(0.8, 0.5, 0.0)', 'p - vec3(-0.8, 0.5, 0.0)'],
+            ['length(p - vec3(-0.8, 0.5, 0.0))', 'length(p - vec3(0.8, 0.5, 0.0))'],
+          ],
+        },
+        {
+          label: 'two-spheres',
+          edits: [['return boxSDF(p - vec3(0.8, 0.5, 0.0), vec3(0.5));', 'return length(p - vec3(0.8, 0.5, 0.0)) - 0.5;']],
+        },
+        { label: 'diffuse-only', edits: [['albedo * (0.2 * diff + 0.8 * sky * ao)', 'albedo * (0.15 + 0.85 * diff)']] },
+        { label: 'over-dark', edits: [['2.5 * occ', '8.0 * occ']] },
+        { label: 'red-box', edits: [['vec3(0.45, 0.65, 0.85)', 'vec3(0.85, 0.25, 0.2)']] },
+      ],
+      injectMild: injectFrom(almost, 'strength-up', 'box-tone'),
+      injectBorderline: [
+        { label: 'inject-dark', edits: [['2.5 * occ', '4.0 * occ']] },
+        { label: 'inject-close', edits: [['vec3(0.0, 3.4, 4.5)', 'vec3(0.0, 3.1, 4.0)']] },
       ],
     } satisfies ChallengeSpec;
   })(),
