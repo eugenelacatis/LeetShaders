@@ -32,7 +32,7 @@ float softShadow(vec3 p, vec3 l) {
     float t = 0.02;
     for (int i = 0; i < 32; i++) {
         float h = sceneSDF(p + l * t);
-        res = min(res, 7.0 * h / t);
+        res = min(res, 2.6 * h / t);
         t += clamp(h, 0.02, 0.4);
         if (res < 0.001 || t > 10.0) break;
     }

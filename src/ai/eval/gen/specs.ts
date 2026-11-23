@@ -523,7 +523,7 @@ float penumbra(vec3 p, vec3 l) {
   float t = 0.02;
   for (int i = 0; i < 32; i++) {
     float h = map(p + l * t);
-    res = min(res, 8.0 * h / t);
+    res = min(res, 3.0 * h / t);
     t += clamp(h, 0.02, 0.4);
     if (res < 0.001 || t > 10.0) break;
   }
@@ -5840,8 +5840,8 @@ float shadowRay(vec3 p, vec3 l) {
       { label: 'sphere-yellow', edits: [['vec3(0.95, 0.75, 0.20)', 'vec3(0.95, 0.73, 0.22)']] },
       { label: 'floor-tone', edits: [['vec3(0.55, 0.62, 0.75)', 'vec3(0.555, 0.62, 0.74)']] },
       { label: 'ambient', edits: [['(0.15 + 0.85 * diff * shadow)', '(0.17 + 0.83 * diff * shadow)']] },
-      { label: 'k-up', edits: [['8.0 * h / t', '9.0 * h / t']] },
-      { label: 'k-down', edits: [['8.0 * h / t', '7.0 * h / t']] },
+      { label: 'k-up', edits: [['3.0 * h / t', '3.4 * h / t']] },
+      { label: 'k-down', edits: [['3.0 * h / t', '2.6 * h / t']] },
       { label: 'focal', edits: [['+ 2.0 * ww', '+ 2.03 * ww']] },
     ];
     return {
@@ -5859,14 +5859,14 @@ float shadowRay(vec3 p, vec3 l) {
       wrong: [
         { label: 'no-shadow', edits: [['float shadow = softShadow(p + n * 0.01, l);', 'float shadow = 1.0;']] },
         { label: 'overhead', edits: [['vec3(1.8, 2.2, 0.4)', 'vec3(0.2, 3.0, 0.1)']] },
-        { label: 'very-soft', edits: [['8.0 * h / t', '1.5 * h / t']] },
+        { label: 'very-soft', edits: [['3.0 * h / t', '0.56 * h / t']] },
         { label: 'light-left', edits: [['vec3(1.8, 2.2, 0.4)', 'vec3(-1.8, 2.2, 0.4)']] },
         { label: 'centered', edits: [['vec3(-0.3, 0.6, 0.0)', 'vec3(0.4, 0.6, 0.0)']] },
         { label: 'blue-sphere', edits: [['vec3(0.95, 0.75, 0.20)', 'vec3(0.2, 0.35, 0.9)']] },
       ],
       injectMild: injectFrom(almost, 'light-x', 'k-up'),
       injectBorderline: [
-        { label: 'inject-softer', edits: [['8.0 * h / t', '4.0 * h / t']] },
+        { label: 'inject-softer', edits: [['3.0 * h / t', '1.5 * h / t']] },
         { label: 'inject-light', edits: [['vec3(1.8, 2.2, 0.4)', 'vec3(1.4, 2.2, 0.8)']] },
       ],
     } satisfies ChallengeSpec;

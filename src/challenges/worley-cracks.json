@@ -5,7 +5,7 @@
   "description": "Draw cracks with Worley noise. The canvas runs from -1 to 1. Multiply uv by 4.0 so there are 8 by 8 cells, one feature point per cell. For cell c, h = pcg(pcg(x) + y); the point is c + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0. PCG is: state = v * 747796405u + 2891336453u; word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u; return (word >> 22u) ^ word. Find F1, the distance to the nearest point, and F2, the distance to the second nearest, over the cell and its 8 neighbours. The crack amount is 1.0 - smoothstep(0.0, 0.1, F2 - F1). Mix stone (0.84, 0.79, 0.70) toward dark (0.10, 0.08, 0.07) by the crack amount.",
   "difficulty": "advanced",
   "track": "noise",
-  "tolerance": 50,
+  "tolerance": 35.8,
   "useBlur": false,
   "hintText": "Track two minimums: when a new distance d is below f1, move f1 into f2 and set f1 = d; otherwise if d is below f2, set f2 = d. The border between two cells is where F2 - F1 is 0."
 }

@@ -5,7 +5,7 @@
   "description": "Draw smooth value noise in grey. The canvas runs from -1 to 1. Multiply uv by 4.0 so there are 8 by 8 lattice cells. Every lattice corner gets a random value: Hash a lattice point (x, y) as h = pcg(pcg(x) + y) and turn it into a number with float(h >> 8) / 16777216.0. PCG is: state = v * 747796405u + 2891336453u; word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u; return (word >> 22u) ^ word. Inside a cell, blend the four corner values with the curve u = f * f * (3.0 - 2.0 * f), where f is fract(uv * 4.0): mix along x first, then along y. Output the result as grey, with no sin().",
   "difficulty": "intermediate",
   "track": "noise",
-  "tolerance": 50,
+  "tolerance": 47.6,
   "useBlur": false,
   "hintText": "Split p = uv * 4.0 into i = ivec2(floor(p)) and f = fract(p). Write hash(ivec2) once, call it for i, i + (1,0), i + (0,1) and i + (1,1), then mix(mix(a, b, u.x), mix(c, d, u.x), u.y)."
 }

@@ -5,7 +5,7 @@
   "description": "Draw marble veins from warped stripes. The canvas runs from -1 to 1. Use value noise: at each lattice corner Hash a lattice point (x, y) as h = pcg(pcg(x) + y) and turn it into a number with float(h >> 8) / 16777216.0. PCG is: state = v * 747796405u + 2891336453u; word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u; return (word >> 22u) ^ word. Blend the four corners with u = f * f * (3.0 - 2.0 * f), mixing along x then y. fBm for this challenge uses 4 octaves: start at amplitude 0.5, add amplitude * noise(p), double p, halve the amplitude, and divide the sum by 0.9375. Compute wave = sin((uv.x + uv.y * 0.5) * 3.0 + 6.0 * fbm(uv * 1.5)). The vein amount is pow(1.0 - abs(wave), 4.0). Mix stone (0.93, 0.92, 0.88) toward slate (0.20, 0.25, 0.35) by the vein amount.",
   "difficulty": "advanced",
   "track": "noise",
-  "tolerance": 50,
+  "tolerance": 41.5,
   "useBlur": false,
   "hintText": "The noise only bends the stripe. Add 6.0 * fbm(uv * 1.5) inside the sin. 1.0 - abs(wave) is 1 on the stripe's centre line, and the power thins it into a vein."
 }

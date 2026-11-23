@@ -5,7 +5,7 @@
   "description": "Draw clouds with fractal Brownian motion. The canvas runs from -1 to 1. Use value noise: at each lattice corner Hash a lattice point (x, y) as h = pcg(pcg(x) + y) and turn it into a number with float(h >> 8) / 16777216.0. PCG is: state = v * 747796405u + 2891336453u; word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u; return (word >> 22u) ^ word. Blend the four corners with u = f * f * (3.0 - 2.0 * f), mixing along x then y. fBm adds 5 octaves of that noise. Start at p = uv * 2.0, amplitude 0.5, and for each octave add amplitude * noise(p), then double p and halve the amplitude. Divide the sum by 0.96875. Color: mix sky (0.25, 0.50, 0.90) to white by smoothstep(0.35, 0.75, n).",
   "difficulty": "advanced",
   "track": "noise",
-  "tolerance": 50,
+  "tolerance": 15.3,
   "useBlur": false,
   "hintText": "Write hash, noise and fbm as helpers. In fbm, loop 5 times: sum += amp * noise(p); p *= 2.0; amp *= 0.5. The amplitudes add up to 0.96875, so divide by that to stay below 1."
 }

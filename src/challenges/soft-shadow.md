@@ -28,7 +28,7 @@ float softShadow(vec3 p, vec3 l) {
     float t = 0.02;
     for (int i = 0; i < 32; i++) {
         float h = sceneSDF(p + l * t);
-        res = min(res, 8.0 * h / t);
+        res = min(res, 3.0 * h / t);
         t += clamp(h, 0.02, 0.4);
         if (res < 0.001 || t > 10.0) break;
     }
@@ -78,4 +78,4 @@ void main() {
 - **Tolerance:** provisional `50`. Run `npx tsx src/ai/eval/run.ts --mae-only --set=tuning` once fixtures exist and replace it.
 - **Blur:** enabled for now (`useBlur: true`), as for Orbital Geometry; calibration decides.
 - **Source:** own code.
-- **Near misses:** Yellow sphere on a blue-grey floor, dusk sky. The shadow edge fades over a few pixels. Near misses use 6 or 10 instead of 8 for the penumbra factor. A hard shadow or no shadow is wrong, and so is Cast Shadow's reference.
+- **Near misses:** Yellow sphere on a blue-grey floor, dusk sky. The shadow edge fades over a few pixels. Near misses use 2.6 or 3.4 instead of 3 for the penumbra factor. A hard shadow or no shadow is wrong, and so is Cast Shadow's reference.
