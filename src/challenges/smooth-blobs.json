@@ -1,0 +1,11 @@
+{
+  "id": "47566c65-a02c-405a-af45-9a406dfbd535",
+  "slug": "smooth-blobs",
+  "title": "Gooey Trio",
+  "description": "Raymarch three spheres melted into one blob with a smooth minimum. The canvas runs from -1 to 1. Camera: ro = (0, 0, 3), rd = normalize(vec3(uv, -1)). March up to 64 steps with t += d, hit when d < 0.001, give up when t > 10. The smooth minimum is smin(a, b, k): h = max(k - abs(a - b), 0.0) / k, result min(a, b) - h * h * k * 0.25. The scene is smin(smin(a, b, 0.6), c, 0.6), where a is a sphere at (-0.8, -0.2, 0) with radius 0.8, b is a sphere at (0.75, -0.15, 0) with radius 0.7, and c is a sphere at (0, 0.7, 0.1) with radius 0.6. Take the normal from central differences with eps 0.001. Light direction l = normalize(vec3(-0.5, 0.8, 0.7)), diffuse = max(dot(n, l), 0.0). The colour is (0.95, 0.45, 0.40) * (0.12 + 0.88 * diffuse). A miss is (0.07, 0.13, 0.16).",
+  "difficulty": "advanced",
+  "track": "raymarching",
+  "tolerance": 50,
+  "useBlur": true,
+  "hintText": "A plain min() leaves a sharp crease where two spheres meet. The smooth minimum looks at how close the two distances are: where they differ by less than k, it pulls the result below the true minimum by h * h * k * 0.25, which rounds the join. Apply it twice to blend all three."
+}

@@ -60,6 +60,10 @@ export const PATH_ORDER: readonly string[] = [
   'hard-shadow',
   'soft-shadow',
   'ambient-occlusion',
+  'smooth-blobs',
+  'repeated-spheres',
+  'fog',
+  'reflections',
 ];
 
 export const RANK: Record<Challenge['difficulty'], number> = {
