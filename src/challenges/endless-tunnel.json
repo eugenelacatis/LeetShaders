@@ -1,0 +1,12 @@
+{
+  "id": "81b48e1c-6035-490b-85f8-f9bbea7080b3",
+  "slug": "endless-tunnel",
+  "title": "Endless Tunnel",
+  "description": "Fly down a tiled tube that never ends. The starter already moves you forward, lights the tube from above and fades the far end into a warm glow; you write three parts. First, the tunnel coordinates: turn each pixel into an angle around the center and a depth into the tube, where depth grows as you get closer to the center. Second, the wall tiles: a staggered grid of rounded tiles in those coordinates, returning how much of the pixel is tile and which row it sits in. Third, the cosine palette that colors each row. Open \"Stuck? Show the numbers\" on any part for the exact radius, tile counts and palette. The walls slide toward you at 0.5 units of depth a second.",
+  "difficulty": "expert",
+  "track": "capstone",
+  "mixes": ["color", "patterns"],
+  "tolerance": 50,
+  "useBlur": true,
+  "hintText": "Check the coordinates first: output fract(tc * vec2(8.0, 1.0)) as red and green and you should see a grid bending down into the center. The tiles are an ordinary brick pattern once you have tc, and the seam at the left is gone when the tile count around is a whole number."
+}

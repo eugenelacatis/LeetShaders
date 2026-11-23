@@ -71,6 +71,8 @@ export const PATH_ORDER: readonly string[] = [
   'reflections',
   'the-full-scene',
   // capstone
+  'endless-tunnel',
+  'kali-fractal',
   'mountain-range',
 ];
 
