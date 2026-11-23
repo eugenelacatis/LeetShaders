@@ -1,0 +1,11 @@
+{
+  "id": "77567518-75ab-4a73-8a81-90a9ce83a3ce",
+  "slug": "voronoi",
+  "title": "Shattered Glass",
+  "description": "Draw a Voronoi diagram. The canvas runs from -1 to 1. Multiply uv by 3.0 so there are 6 by 6 cells, and give every cell one feature point. For cell c, h = pcg(pcg(x) + y); the point is c + vec2(float(h & 0xFFFFu), float(h >> 16)) / 65536.0. PCG is: state = v * 747796405u + 2891336453u; word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u; return (word >> 22u) ^ word. Each pixel finds the nearest feature point among its own cell and the 8 neighbours. Color the pixel with that point's cell color: k = pcg(h), then red = k & 255u, green = (k >> 8) & 255u, blue = (k >> 16) & 255u, each divided by 255.0, and the final color is 0.25 + 0.7 * that.",
+  "difficulty": "intermediate",
+  "track": "noise",
+  "tolerance": 50,
+  "useBlur": false,
+  "hintText": "Loop y and x from -1 to 1 over ivec2 neighbours of ivec2(floor(p)). Keep the smallest distance(p, point) and remember that cell's h. Take pcg(h) again for the color, and use h & 0xFFFFu and h >> 16 for the point."
+}

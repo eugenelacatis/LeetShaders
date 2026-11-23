@@ -47,6 +47,11 @@ export const PATH_ORDER: readonly string[] = [
   'kaleidoscope',
   // noise
   'white-noise',
+  'value-noise',
+  'voronoi',
+  'worley-cracks',
+  'fbm-clouds',
+  'marble',
   // raymarching
   'raymarched-sphere',
 ];
