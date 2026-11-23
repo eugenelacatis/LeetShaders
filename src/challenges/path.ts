@@ -74,6 +74,7 @@ export const PATH_ORDER: readonly string[] = [
   'endless-tunnel',
   'kali-fractal',
   'mountain-range',
+  'mandelbulb',
 ];
 
 export const RANK: Record<Challenge['difficulty'], number> = {
