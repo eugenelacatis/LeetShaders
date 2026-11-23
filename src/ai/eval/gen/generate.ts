@@ -79,6 +79,12 @@ function timeBranch(ref: string, kind: 'time-eq' | 'mouse-eq' | 'time-gt'): stri
   return src.replace('  shade();\n}', `  shade();\n${tail}\n}`);
 }
 
+/** An animated reference frozen at t = 0: `u_time` dropped and every use replaced by 0.0. */
+function staticFrame(ref: string): string {
+  if (!ref.includes('uniform float u_time;\n')) throw new Error('static-frame: no u_time uniform');
+  return ref.replace('uniform float u_time;\n', '').replace(/\bu_time\b/g, '0.0');
+}
+
 /** Whole-image wrong answers: a color post-process or a remap of gl_FragCoord. */
 function wrongTransform(ref: string, kind: WrongTransform): string {
   if (kind === 'inverted' || kind === 'bgr') {
@@ -213,6 +219,7 @@ async function main(): Promise<void> {
       for (const kind of ['time-eq', 'mouse-eq', 'time-gt'] as const) {
         put('adversarial', spec.slug, kind, timeBranch(ref, kind));
       }
+      if (spec.staticFrame) put('adversarial', spec.slug, 'static-frame', staticFrame(ref));
       for (const h of spec.handAdversarial ?? []) put('adversarial', spec.slug, h.label, h.src);
       const injected = [...spec.injectMild, ...spec.injectBorderline];
       injected.forEach((e, i) => {

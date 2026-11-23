@@ -5,6 +5,6 @@
   "description": "Raymarch a sphere on a floor and give it a hard shadow. The canvas runs from -1 to 1. Camera: ro = (0, 3.2, 4), looking at (0, 0.3, 0). Use ww = normalize(target - ro), uu = normalize(cross(ww, vec3(0, 1, 0))), vv = cross(uu, ww), and rd = normalize(uv.x * uu + uv.y * vv + 2.0 * ww). March up to 64 steps with t += d, hit when d < 0.001, give up when t > 40. The scene is the closer of a sphere (centre (0, 0.6, 0), radius 0.6) and the floor, whose distance is p.y. Take the normal from central differences with eps 0.001. Light direction l = normalize(vec3(-1.8, 2.2, 0.4)), diffuse = max(dot(n, l), 0.0). For the shadow, start at p + n * 0.01, set t = 0.02 and march toward l for up to 32 steps: if the scene distance at start + l * t is below 0.001 the point is in shadow (shadow = 0.0), otherwise add d to t and stop when t > 8; with no hit, shadow = 1.0. The colour is albedo * (0.15 + 0.85 * diffuse * shadow). The albedo is red (0.85, 0.25, 0.20) where the sphere is closer than the floor, otherwise grey (0.80, 0.78, 0.72). A miss is (0.62, 0.76, 0.92).",
   "difficulty": "advanced",
   "track": "raymarching",
-  "tolerance": 50,
+  "tolerance": 6,
   "useBlur": true
 }

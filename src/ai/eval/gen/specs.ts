@@ -37,6 +37,9 @@ export interface ChallengeSpec {
   others: string[];
   /** Color-table cheat sizes. Default [8, 16, 24]. Empty where a table is the honest answer. */
   tables?: number[];
+  /** Animated reference: add a `static-frame` cheat (its t = 0 frame, `u_time` removed),
+   *  counted with the other adversarials. */
+  staticFrame?: boolean;
   /** Hand-written cheats (full sources), counted with tables, branches and injections. */
   handAdversarial?: { label: string; src: string }[];
   /** Edits for the injection fixtures: mild (almost-correct) then borderline.
@@ -579,6 +582,243 @@ float occlusion(vec3 p, vec3 n) {
   bg: 'vec3(0.12, 0.14, 0.18)',
   maxT: '40.0',
 };
+
+// ─── Batch 5 helpers: raymarching scenes and boss key cheats ─────────────────
+
+function lookAtOrigin(eye: string): string {
+  return `vec3 ro = vec3(${eye});
+  vec3 ww = normalize(-ro);
+  vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
+  vec3 vv = cross(uu, ww);
+  vec3 rd = normalize(uv.x * uu + uv.y * vv + 2.0 * ww);`;
+}
+
+/** IQ's mix form of the polynomial smooth minimum; equal to the max(k - |a - b|) form. */
+const SMIN_MIX_GLSL = `float smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}`;
+
+const SMOOTH_BLOBS_SCENE: MarchScene = {
+  helpers: `${SMIN_MIX_GLSL}
+
+float map(vec3 p) {
+  float a = length(p - vec3(-0.8, -0.2, 0.0)) - 0.8;
+  float b = length(p - vec3(0.75, -0.15, 0.0)) - 0.7;
+  float c = length(p - vec3(0.0, 0.7, 0.1)) - 0.6;
+  return smin(smin(a, b, 0.6), c, 0.6);
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  float diff = max(dot(n, normalize(vec3(-0.5, 0.8, 0.7))), 0.0);
+  return vec3(0.95, 0.45, 0.40) * (0.12 + 0.88 * diff);
+}`,
+  camera: SIMPLE_CAMERA,
+  bg: 'vec3(0.07, 0.13, 0.16)',
+  maxT: '10.0',
+};
+
+const REPEATED_SPHERES_SCENE: MarchScene = {
+  helpers: `float map(vec3 p) {
+  // mod written out: x - 2 floor((x + 1) / 2) folds every cell onto -1..1
+  vec2 c = p.xz - 2.0 * floor((p.xz + 1.0) / 2.0);
+  float sphere = length(vec3(c.x, p.y - 0.5, c.y)) - 0.4;
+  return min(sphere, p.y);
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  float diff = max(dot(n, normalize(vec3(0.4, 1.0, 0.3))), 0.0);
+  vec3 albedo = p.y < 0.002 ? vec3(0.18, 0.26, 0.34) : vec3(0.93, 0.88, 0.78);
+  return albedo * (0.15 + 0.85 * diff);
+}`,
+  camera: lookAtOrigin('0.0, 4.0, 5.0'),
+  bg: 'vec3(0.04, 0.05, 0.09)',
+  maxT: '40.0',
+};
+
+const FOG_SCENE: MarchScene = {
+  helpers: `const vec4 SPHERES[6] = vec4[6](
+  vec4(-1.3, -0.4, 0.0, 0.6),
+  vec4(1.8, 0.3, -3.0, 0.6),
+  vec4(-2.6, 0.6, -6.0, 0.6),
+  vec4(3.2, -0.3, -9.0, 0.6),
+  vec4(-3.8, 0.2, -12.0, 0.6),
+  vec4(0.0, 0.0, -15.0, 0.8));
+
+float map(vec3 p) {
+  float d = 1e9;
+  for (int i = 0; i < 6; i++) d = min(d, length(p - SPHERES[i].xyz) - SPHERES[i].w);
+  return d;
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  float diff = max(dot(n, normalize(vec3(0.5, 1.0, 0.6))), 0.0);
+  vec3 col = vec3(0.85, 0.30, 0.22) * (0.2 + 0.8 * diff);
+  return mix(col, vec3(0.75, 0.80, 0.86), 1.0 - exp(-0.15 * length(p - ro)));
+}`,
+  camera: SIMPLE_CAMERA,
+  bg: 'vec3(0.75, 0.80, 0.86)',
+  maxT: '40.0',
+};
+
+const REFLECTIONS_SCENE: MarchScene = {
+  helpers: `float sphereA(vec3 p) {
+  return length(p - vec3(-0.9, 0.6, 0.0)) - 0.6;
+}
+
+float sphereB(vec3 p) {
+  return length(p - vec3(0.9, 0.45, -0.8)) - 0.45;
+}
+
+float map(vec3 p) {
+  return min(min(sphereA(p), sphereB(p)), p.y);
+}
+
+vec3 surface(vec3 p, vec3 n) {
+  vec3 albedo = vec3(0.10, 0.12, 0.16);
+  if (sphereA(p) < 0.002) albedo = vec3(0.90, 0.30, 0.55);
+  else if (sphereB(p) < 0.002) albedo = vec3(0.95, 0.80, 0.25);
+  return albedo * (0.2 + 0.8 * max(dot(n, normalize(vec3(0.4, 0.8, 0.5))), 0.0));
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  vec3 col = surface(p, n);
+  if (p.y >= 0.002) return col;
+  vec3 r = reflect(normalize(p - ro), n);
+  vec3 q = p + n * 0.01;
+  vec3 seen = vec3(0.55, 0.70, 0.90);
+  float t = 0.0;
+  for (int i = 0; i < 32; i++) {
+    float d = map(q + r * t);
+    if (d < 0.001) {
+      vec3 h = q + r * t;
+      seen = surface(h, calcNormal(h));
+      break;
+    }
+    t += d;
+    if (t > 20.0) break;
+  }
+  return 0.5 * (col + seen);
+}`,
+  camera: lookAtOrigin('0.0, 3.2, 4.5'),
+  bg: 'vec3(0.55, 0.70, 0.90)',
+  maxT: '40.0',
+};
+
+const FULL_SCENE: MarchScene = {
+  helpers: `${SMIN_MIX_GLSL}
+
+float blobDist(vec3 p) {
+  return smin(length(p - vec3(-0.45, 0.55, 0.0)) - 0.55, length(p - vec3(0.50, 0.45, 0.25)) - 0.45, 0.5);
+}
+
+float map(vec3 p) {
+  return min(blobDist(p), p.y);
+}
+
+float penumbra(vec3 p, vec3 l) {
+  float res = 1.0;
+  float t = 0.02;
+  for (int i = 0; i < 32; i++) {
+    float h = map(p + l * t);
+    res = min(res, 3.0 * h / t);
+    t += clamp(h, 0.02, 0.4);
+    if (res < 0.001 || t > 10.0) break;
+  }
+  return clamp(res, 0.0, 1.0);
+}
+
+float occlusion(vec3 p, vec3 n) {
+  float occ = 0.0;
+  float w = 1.0;
+  for (int i = 0; i < 5; i++) {
+    float h = 0.04 + 0.1 * float(i);
+    occ += (h - map(p + n * h)) * w;
+    w *= 0.7;
+  }
+  return clamp(1.0 - 2.5 * occ, 0.0, 1.0);
+}`,
+  shade: `vec3 shade(vec3 p, vec3 ro) {
+  vec3 n = calcNormal(p);
+  float a = 6.28318 * u_time / 16.0;
+  vec3 l = normalize(vec3(1.5 * cos(a), 2.0, 1.5 * sin(a)));
+  float diff = max(dot(n, l), 0.0);
+  float s = penumbra(p + n * 0.01, l);
+  float sky = 0.5 + 0.5 * n.y;
+  vec3 albedo = blobDist(p) < 0.002 ? vec3(0.30, 0.75, 0.55) : vec3(0.92, 0.88, 0.80);
+  vec3 col = albedo * (0.25 * sky * occlusion(p, n) + 0.75 * diff * s);
+  return mix(col, vec3(0.62, 0.70, 0.80), 1.0 - exp(-0.06 * length(p - ro)));
+}`,
+  camera: lookAtCamera('0.0, 3.5, 4.5'),
+  bg: 'vec3(0.62, 0.70, 0.80)',
+  maxT: '40.0',
+};
+
+/** woven-truchet with the 36 tile kinds baked into a table (ids -3..2 at 512x512), no hash. */
+function wovenKindTable(): string {
+  const kinds: string[] = [];
+  for (let y = -3; y <= 2; y++) {
+    for (let x = -3; x <= 2; x++) kinds.push(String(hash2(x, y) % 3));
+  }
+  const rows: string[] = [];
+  for (let i = 0; i < 36; i += 6) rows.push('  ' + kinds.slice(i, i + 6).join(', '));
+  return `${HEADER}
+// Tile kinds, 6x6, row-major from the bottom-left: 0 and 1 are arcs, 2 is a crossing.
+const int KIND[36] = int[36](
+${rows.join(',\n')}
+);
+
+float fill(float d) {
+  return 1.0 - smoothstep(-0.01, 0.01, d);
+}
+
+vec3 strand(vec3 color, float d, vec3 rope) {
+  color = mix(color, vec3(0.03, 0.06, 0.07), fill(d - 0.15));
+  return mix(color, rope, fill(d - 0.10));
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 2.5;
+  ivec2 id = clamp(ivec2(floor(p)), ivec2(-3), ivec2(2));
+  vec2 f = fract(p) - 0.5;
+  float s = fract((p.x + p.y) * 0.25 - u_time / 12.0);
+  vec3 rope = mix(vec3(0.85, 0.62, 0.25), vec3(1.0, 0.92, 0.70), 1.0 - smoothstep(0.0, 0.12, abs(s - 0.5)));
+  vec3 color = vec3(0.05, 0.20, 0.22);
+  int kind = KIND[(id.y + 3) * 6 + id.x + 3];
+  if (kind == 2) {
+    bool acrossOnTop = ((id.x + id.y) & 1) == 0;
+    color = strand(color, acrossOnTop ? abs(f.x) : abs(f.y), rope);
+    color = strand(color, acrossOnTop ? abs(f.y) : abs(f.x), rope);
+  } else {
+    vec2 c = (kind == 0) ? vec2(0.5, 0.5) : vec2(0.5, -0.5);
+    color = strand(color, min(abs(length(f - c) - 0.5), abs(length(f + c) - 0.5)), rope);
+  }
+  fragColor = vec4(color, 1.0);
+}
+`;
+}
+
+/** fBm and the warp chain of domain-warp.glsl. Needs `noise`. */
+const DOMAIN_WARP_FBM_GLSL = `float fbm(vec2 p) {
+  float sum = 0.0;
+  float amp = 0.5;
+  for (int o = 0; o < 4; o++) {
+    sum += amp * noise(p);
+    p *= 2.0;
+    amp *= 0.5;
+  }
+  return sum / 0.9375;
+}
+
+vec2 fbm2(vec2 p) {
+  return vec2(fbm(p), fbm(p + vec2(5.2, 1.3)));
+}`;
+
+const DOMAIN_WARP_COLOR_GLSL = `vec3 inkToGold(float v) {
+  vec3 color = mix(vec3(0.05, 0.03, 0.18), vec3(0.75, 0.20, 0.45), smoothstep(0.40, 0.55, v));
+  return mix(color, vec3(1.00, 0.85, 0.55), smoothstep(0.58, 0.72, v));
+}`;
 
 export const SPECS: ChallengeSpec[] = [
   // ─── circle-sdf (beginner, tol 10, blur) ─────────────────────────────────
@@ -5919,6 +6159,1019 @@ float shadowRay(vec3 p, vec3 l) {
       injectBorderline: [
         { label: 'inject-dark', edits: [['2.5 * occ', '4.0 * occ']] },
         { label: 'inject-close', edits: [['vec3(0.0, 3.4, 4.5)', 'vec3(0.0, 3.1, 4.0)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── smooth-blobs (advanced, track 6, blur) ──────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'light-x', edits: [['vec3(-0.5, 0.8, 0.7)', 'vec3(-0.55, 0.8, 0.7)']] },
+      { label: 'light-move', edits: [['vec3(-0.5, 0.8, 0.7)', 'vec3(-0.45, 0.85, 0.7)']] },
+      { label: 'camera-back', edits: [['vec3 ro = vec3(0.0, 0.0, 3.0);', 'vec3 ro = vec3(0.0, 0.0, 3.03);']] },
+      { label: 'albedo', edits: [['vec3(0.95, 0.45, 0.40)', 'vec3(0.95, 0.46, 0.39)']] },
+      { label: 'ambient', edits: [['(0.12 + 0.88 * diff)', '(0.14 + 0.86 * diff)']] },
+      { label: 'background', edits: [['vec3(0.07, 0.13, 0.16)', 'vec3(0.072, 0.132, 0.162)']] },
+      { label: 'blend-up', edits: [['smin(smin(a, b, 0.6), c, 0.6)', 'smin(smin(a, b, 0.62), c, 0.62)']] },
+      { label: 'blend-down', edits: [['smin(smin(a, b, 0.6), c, 0.6)', 'smin(smin(a, b, 0.58), c, 0.58)']] },
+      { label: 'radius-tiny', edits: [['- 0.8;', '- 0.81;']] },
+      { label: 'top-nudge', edits: [['vec3(0.0, 0.7, 0.1)', 'vec3(0.0, 0.71, 0.1)']] },
+    ];
+    return {
+      slug: 'smooth-blobs',
+      others: ['smooth-union', 'raymarched-sphere', 'raymarched-capsule', 'the-full-scene'],
+      renames: { ro: 'origin', rd: 'dir', t: 'dist', hit: 'found', color: 'col', diff: 'lambert' },
+      handCorrect: [
+        { label: 'mix-smin', src: marchVariant(SMOOTH_BLOBS_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(SMOOTH_BLOBS_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(SMOOTH_BLOBS_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(SMOOTH_BLOBS_SCENE, 'tetra') },
+      ],
+      almost,
+      wrong: [
+        { label: 'hard-union', edits: [['return smin(smin(a, b, 0.6), c, 0.6);', 'return min(min(a, b), c);']] },
+        { label: 'very-gooey', edits: [['smin(smin(a, b, 0.6), c, 0.6)', 'smin(smin(a, b, 1.5), c, 1.5)']] },
+        { label: 'two-spheres', edits: [['return smin(smin(a, b, 0.6), c, 0.6);', 'return smin(a, b, 0.6);']] },
+        { label: 'blue', edits: [['vec3(0.95, 0.45, 0.40)', 'vec3(0.30, 0.50, 0.95)']] },
+        { label: 'backlit', edits: [['vec3(-0.5, 0.8, 0.7)', 'vec3(0.5, -0.8, -0.7)']] },
+        { label: 'spread', edits: [['vec3(0.75, -0.15, 0.0)', 'vec3(1.2, -0.15, 0.0)']] },
+      ],
+      injectMild: injectFrom(almost, 'light-x', 'albedo'),
+      injectBorderline: [
+        { label: 'inject-blend', edits: [['smin(smin(a, b, 0.6), c, 0.6)', 'smin(smin(a, b, 0.9), c, 0.9)']] },
+        { label: 'inject-radius', edits: [['- 0.8;', '- 0.9;']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── repeated-spheres (advanced, track 6, blur) ──────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'light-x', edits: [['vec3(0.4, 1.0, 0.3)', 'vec3(0.45, 1.0, 0.3)']] },
+      { label: 'light-move', edits: [['vec3(0.4, 1.0, 0.3)', 'vec3(0.4, 1.0, 0.35)']] },
+      { label: 'camera-back', edits: [['vec3(0.0, 4.0, 5.0)', 'vec3(0.0, 4.0, 5.05)']] },
+      { label: 'camera-up', edits: [['vec3(0.0, 4.0, 5.0)', 'vec3(0.0, 4.03, 5.0)']] },
+      { label: 'floor-tone', edits: [['vec3(0.18, 0.26, 0.34)', 'vec3(0.185, 0.26, 0.335)']] },
+      { label: 'sphere-tone', edits: [['vec3(0.93, 0.88, 0.78)', 'vec3(0.93, 0.87, 0.79)']] },
+      { label: 'ambient', edits: [['(0.15 + 0.85 * diff)', '(0.17 + 0.83 * diff)']] },
+      { label: 'background', edits: [['vec3(0.04, 0.05, 0.09)', 'vec3(0.045, 0.055, 0.095)']] },
+      { label: 'radius-tiny', edits: [['- 0.4;', '- 0.405;']] },
+      { label: 'focal', edits: [['+ 2.0 * ww', '+ 2.02 * ww']] },
+    ];
+    return {
+      slug: 'repeated-spheres',
+      others: ['polka-dots', 'hard-shadow', 'reflections', 'fog'],
+      renames: { ro: 'eye', rd: 'dir', ww: 'fwd', uu: 'right', vv: 'up', hit: 'found', albedo: 'base', q: 'cell' },
+      handCorrect: [
+        { label: 'floor-fold', src: marchVariant(REPEATED_SPHERES_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(REPEATED_SPHERES_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(REPEATED_SPHERES_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(REPEATED_SPHERES_SCENE, 'tetra') },
+      ],
+      almost,
+      wrong: [
+        { label: 'no-repeat', edits: [['q.xz = mod(p.xz + 1.0, 2.0) - 1.0;', '']] },
+        { label: 'wide-spacing', edits: [['mod(p.xz + 1.0, 2.0) - 1.0', 'mod(p.xz + 1.5, 3.0) - 1.5']] },
+        { label: 'big-spheres', edits: [['- 0.4;', '- 0.7;']] },
+        { label: 'x-only', edits: [['q.xz = mod(p.xz + 1.0, 2.0) - 1.0;', 'q.x = mod(p.x + 1.0, 2.0) - 1.0;']] },
+        { label: 'red-spheres', edits: [['vec3(0.93, 0.88, 0.78)', 'vec3(0.85, 0.25, 0.20)']] },
+        { label: 'low-light', edits: [['vec3(0.4, 1.0, 0.3)', 'vec3(1.0, 0.15, 0.3)']] },
+      ],
+      injectMild: injectFrom(almost, 'light-x', 'sphere-tone'),
+      injectBorderline: [
+        { label: 'inject-spacing', edits: [['mod(p.xz + 1.0, 2.0) - 1.0', 'mod(p.xz + 1.1, 2.2) - 1.1']] },
+        { label: 'inject-radius', edits: [['- 0.4;', '- 0.47;']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── fog (advanced, track 6, blur) ───────────────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'density-up', edits: [['-0.15 * t', '-0.155 * t']] },
+      { label: 'density-down', edits: [['-0.15 * t', '-0.145 * t']] },
+      { label: 'fog-tint', edits: [['vec3 fogColor = vec3(0.75, 0.80, 0.86);', 'vec3 fogColor = vec3(0.75, 0.80, 0.862);']] },
+      { label: 'light-x', edits: [['vec3(0.5, 1.0, 0.6)', 'vec3(0.55, 1.0, 0.6)']] },
+      { label: 'light-move', edits: [['vec3(0.5, 1.0, 0.6)', 'vec3(0.5, 1.05, 0.6)']] },
+      { label: 'albedo', edits: [['vec3(0.85, 0.30, 0.22)', 'vec3(0.86, 0.30, 0.21)']] },
+      { label: 'ambient', edits: [['(0.2 + 0.8 * diff)', '(0.22 + 0.78 * diff)']] },
+      { label: 'camera-back', edits: [['vec3 ro = vec3(0.0, 0.0, 3.0);', 'vec3 ro = vec3(0.0, 0.0, 3.05);']] },
+      { label: 'near-nudge', edits: [['vec3(-1.3, -0.4, 0.0)', 'vec3(-1.31, -0.4, 0.0)']] },
+      { label: 'far-radius', edits: [['- 0.8);', '- 0.82);']] },
+    ];
+    return {
+      slug: 'fog',
+      others: ['repeated-spheres', 'raymarched-sphere', 'smooth-blobs', 'the-full-scene'],
+      renames: { ro: 'origin', rd: 'dir', t: 'dist', hit: 'found', color: 'col', diff: 'lambert', fogColor: 'haze' },
+      handCorrect: [
+        { label: 'sphere-array', src: marchVariant(FOG_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(FOG_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(FOG_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(FOG_SCENE, 'tetra') },
+      ],
+      almost,
+      wrong: [
+        { label: 'no-fog', edits: [['color = mix(color, fogColor, 1.0 - exp(-0.15 * t));', '']] },
+        { label: 'thick-fog', edits: [['-0.15 * t', '-0.6 * t']] },
+        { label: 'linear-fog', edits: [['1.0 - exp(-0.15 * t)', 'clamp(t / 20.0, 0.0, 1.0)']] },
+        { label: 'dark-fog', edits: [['vec3 fogColor = vec3(0.75, 0.80, 0.86);', 'vec3 fogColor = vec3(0.08, 0.08, 0.12);']] },
+        { label: 'blue-spheres', edits: [['vec3(0.85, 0.30, 0.22)', 'vec3(0.25, 0.45, 0.90)']] },
+        { label: 'no-near', edits: [['float d = length(p - vec3(-1.3, -0.4, 0.0)) - 0.6;', 'float d = 1e9;']] },
+      ],
+      injectMild: injectFrom(almost, 'density-up', 'albedo'),
+      injectBorderline: [
+        { label: 'inject-density', edits: [['-0.15 * t', '-0.2 * t']] },
+        { label: 'inject-light', edits: [['vec3(0.5, 1.0, 0.6)', 'vec3(1.0, 0.6, 0.6)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── reflections (advanced, track 6, blur) ───────────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'light-x', edits: [['vec3(0.4, 0.8, 0.5)', 'vec3(0.45, 0.8, 0.5)']] },
+      { label: 'light-move', edits: [['vec3(0.4, 0.8, 0.5)', 'vec3(0.4, 0.85, 0.5)']] },
+      { label: 'camera-back', edits: [['vec3(0.0, 3.2, 4.5)', 'vec3(0.0, 3.2, 4.55)']] },
+      { label: 'camera-up', edits: [['vec3(0.0, 3.2, 4.5)', 'vec3(0.0, 3.25, 4.5)']] },
+      { label: 'mirror-more', edits: [['mix(color, seen, 0.5)', 'mix(color, seen, 0.505)']] },
+      { label: 'floor-tone', edits: [['vec3(0.10, 0.12, 0.16)', 'vec3(0.105, 0.12, 0.155)']] },
+      { label: 'pink', edits: [['vec3(0.90, 0.30, 0.55)', 'vec3(0.91, 0.30, 0.54)']] },
+      { label: 'sky', edits: [['const vec3 SKY = vec3(0.55, 0.70, 0.90);', 'const vec3 SKY = vec3(0.55, 0.70, 0.905);']] },
+      { label: 'ambient', edits: [['(0.2 + 0.8 * diff)', '(0.22 + 0.78 * diff)']] },
+      { label: 'bounce-bias', edits: [['p + n * 0.01', 'p + n * 0.015']] },
+    ];
+    return {
+      slug: 'reflections',
+      others: ['hard-shadow', 'repeated-spheres', 'ambient-occlusion', 'smooth-blobs'],
+      renames: { ro: 'eye', rd: 'dir', ww: 'fwd', uu: 'right', vv: 'up', rr: 'bounceDir', rp: 'bounceFrom', rt: 'bounceT', seen: 'mirrored', hp: 'bounceHit' },
+      handCorrect: [
+        { label: 'surface-fn', src: marchVariant(REFLECTIONS_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(REFLECTIONS_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(REFLECTIONS_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(REFLECTIONS_SCENE, 'tetra') },
+      ],
+      almost,
+      wrong: [
+        { label: 'no-reflection', edits: [['color = mix(color, seen, 0.5);', '']] },
+        { label: 'full-mirror', edits: [['mix(color, seen, 0.5)', 'mix(color, seen, 1.0)']] },
+        {
+          label: 'swap-colors',
+          edits: [
+            ['if (sphereA(p) < 0.002) albedo = vec3(0.90, 0.30, 0.55);', 'if (sphereA(p) < 0.002) albedo = vec3(0.95, 0.80, 0.25);'],
+            ['else if (sphereB(p) < 0.002) albedo = vec3(0.95, 0.80, 0.25);', 'else if (sphereB(p) < 0.002) albedo = vec3(0.90, 0.30, 0.55);'],
+          ],
+        },
+        { label: 'sky-only', edits: [['float rt = march(rp, rr, 32, 20.0);', 'float rt = -1.0;']] },
+        { label: 'blue-floor', edits: [['vec3(0.10, 0.12, 0.16)', 'vec3(0.20, 0.35, 0.70)']] },
+        { label: 'sphere-moved', edits: [['vec3(0.9, 0.45, -0.8)', 'vec3(0.9, 0.45, 0.6)']] },
+      ],
+      injectMild: injectFrom(almost, 'light-x', 'pink'),
+      injectBorderline: [
+        { label: 'inject-mirror', edits: [['mix(color, seen, 0.5)', 'mix(color, seen, 0.65)']] },
+        { label: 'inject-camera', edits: [['vec3(0.0, 3.2, 4.5)', 'vec3(0.0, 2.9, 4.2)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── cosine-sunset (expert, color boss, animated) ────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'phase-offset', edits: [['u_time / 8.0', 'u_time / 8.0 + 0.005']] },
+      { label: 'd-tweak', edits: [['vec3(0.00, 0.10, 0.20)', 'vec3(0.00, 0.10, 0.205)']] },
+      { label: 'a-tweak', edits: [['vec3 a = vec3(0.5, 0.5, 0.5);', 'vec3 a = vec3(0.5, 0.5, 0.51);']] },
+      { label: 'b-tweak', edits: [['vec3 b = vec3(0.5, 0.5, 0.5);', 'vec3 b = vec3(0.49, 0.5, 0.5);']] },
+      { label: 'sky-offset', edits: [['0.30 + 0.25 * uv.y', '0.305 + 0.25 * uv.y']] },
+      { label: 'sky-spread', edits: [['0.30 + 0.25 * uv.y', '0.30 + 0.255 * uv.y']] },
+      { label: 'sun-low', edits: [['vec2(0.0, -0.6)', 'vec2(0.0, -0.605)']] },
+      { label: 'sun-x', edits: [['vec2(0.0, -0.6)', 'vec2(0.005, -0.6)']] },
+      { label: 'blend-edge', edits: [['smoothstep(0.35, 0.75, r)', 'smoothstep(0.36, 0.76, r)']] },
+      { label: 'ring-freq', edits: [['2.0 * r', '2.02 * r']] },
+    ];
+    return {
+      slug: 'cosine-sunset',
+      others: ['golden-hour', 'concentric-rings', 'radial-gradient'],
+      renames: { uv: 'st', sky: 'skyColor', sun: 'rings', r: 'dist', color: 'col' },
+      handCorrect: [
+        {
+          label: 'inline-palette',
+          src: `${HEADER}
+const float TAU = 6.28318;
+
+vec3 pal(float t) {
+  return 0.5 + 0.5 * cos(TAU * (t + vec3(0.0, 0.1, 0.2)));
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float r = distance(uv, vec2(0.0, -0.6));
+  vec3 sky = pal(0.3 + 0.25 * uv.y);
+  vec3 sun = pal(2.0 * r - 0.125 * u_time);
+  fragColor = vec4(mix(sun, sky, smoothstep(0.35, 0.75, r)), 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-mix',
+          src: `${HEADER}
+vec3 palette(float t) {
+  return vec3(0.5) + vec3(0.5) * cos(6.28318 * (vec3(1.0) * t + vec3(0.00, 0.10, 0.20)));
+}
+
+void main() {
+  vec2 st = gl_FragCoord.xy - 0.5 * u_resolution;
+  st /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec3 sky = palette(0.30 + 0.25 * st.y);
+  float d = length(st - vec2(0.0, -0.6));
+  vec3 rings = palette(2.0 * d - u_time / 8.0);
+  float s = smoothstep(0.35, 0.75, d);
+  fragColor = vec4(rings + (sky - rings) * s, 1.0);
+}
+`,
+        },
+        {
+          label: 'channels',
+          src: `${HEADER}
+float wave(float t, float phase) {
+  return 0.5 + 0.5 * cos(6.28318 * (t + phase));
+}
+
+vec3 palette(float t) {
+  return vec3(wave(t, 0.0), wave(t, 0.1), wave(t, 0.2));
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float r = length(uv - vec2(0.0, -0.6));
+  float k = smoothstep(0.35, 0.75, r);
+  vec3 color = (1.0 - k) * palette(2.0 * r - u_time / 8.0) + k * palette(0.30 + 0.25 * uv.y);
+  fragColor = vec4(color, 1.0);
+}
+`,
+        },
+        {
+          label: 'fract-phase',
+          src: `${HEADER}
+// The palette repeats every 1.0, so only the fractional part of t matters.
+vec3 palette(float t) {
+  return 0.5 + 0.5 * cos(6.28318 * (fract(t) + vec3(0.00, 0.10, 0.20)));
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 sunPos = vec2(0.0, -0.6);
+  float r = length(uv - sunPos);
+  vec3 color = mix(palette(2.0 * r - u_time / 8.0), palette(0.30 + 0.25 * uv.y), smoothstep(0.35, 0.75, r));
+  fragColor = vec4(color, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['flip-y'],
+      wrong: [
+        { label: 'speed-5', edits: [['u_time / 8.0', 'u_time / 7.6']] },
+        { label: 'reversed', edits: [['- u_time / 8.0', '+ u_time / 8.0']] },
+        { label: 'no-rings', edits: [['vec3 color = mix(sun, sky, smoothstep(0.35, 0.75, r));', 'vec3 color = sky;']] },
+        { label: 'rainbow', edits: [['vec3(0.00, 0.10, 0.20)', 'vec3(0.00, 0.33, 0.67)']] },
+        { label: 'hard-edge', edits: [['smoothstep(0.35, 0.75, r)', 'step(0.55, r)']] },
+        { label: 'fine-rings', edits: [['2.0 * r', '6.0 * r']] },
+      ],
+      staticFrame: true,
+      injectMild: injectFrom(almost, 'd-tweak'),
+      injectBorderline: [
+        { label: 'inject-phase', edits: [['u_time / 8.0', 'u_time / 8.0 + 0.08']] },
+        { label: 'inject-sky', edits: [['0.30 + 0.25 * uv.y', '0.36 + 0.25 * uv.y']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── clock-face (expert, shapes boss, animated) ──────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'ivory', edits: [['vec3(0.92, 0.90, 0.85)', 'vec3(0.93, 0.90, 0.84)']] },
+      { label: 'red', edits: [['vec3(0.90, 0.22, 0.20)', 'vec3(0.91, 0.22, 0.21)']] },
+      { label: 'face', edits: [['vec3(0.14, 0.16, 0.24)', 'vec3(0.142, 0.16, 0.24)']] },
+      { label: 'navy', edits: [['vec3(0.08, 0.09, 0.14)', 'vec3(0.082, 0.09, 0.14)']] },
+      { label: 'rim-width', edits: [['abs(r - 0.88) - 0.025', 'abs(r - 0.88) - 0.0255']] },
+      { label: 'tick-width', edits: [['- 0.015);', '- 0.016);']] },
+      { label: 'long-phase', edits: [['6.28318 * u_time / 5.0', '6.28318 * u_time / 5.0 + 0.01']] },
+      { label: 'short-len', edits: [['* 0.45;', '* 0.46;']] },
+      { label: 'hub', edits: [['fill(r - 0.05)', 'fill(r - 0.053)']] },
+      { label: 'aa', edits: [['smoothstep(-0.006, 0.006, d)', 'smoothstep(-0.007, 0.007, d)']] },
+    ];
+    return {
+      slug: 'clock-face',
+      others: ['ring', 'line-segment', 'circle-sdf'],
+      renames: { uv: 'st', navy: 'bg', face: 'dial', ivory: 'chalk', red: 'accent', ticks: 'marks', shortTip: 'hourTip', longTip: 'minuteTip', fill: 'cover', r: 'dist' },
+      handCorrect: [
+        {
+          label: 'rotate-hands',
+          src: `${HEADER}
+mat2 turn(float a) {
+  float c = cos(a);
+  float s = sin(a);
+  return mat2(c, s, -s, c);
+}
+
+// Turn p into the hand's frame, where the hand points straight up from the hub.
+float hand(vec2 p, float angle, float len) {
+  vec2 q = turn(angle) * p;
+  q.y -= clamp(q.y, 0.0, len);
+  return length(q);
+}
+
+float cover(float d) {
+  return 1.0 - smoothstep(-0.006, 0.006, d);
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float r = length(uv);
+  vec3 col = mix(vec3(0.08, 0.09, 0.14), vec3(0.14, 0.16, 0.24), cover(r - 0.88));
+  col = mix(col, vec3(0.92, 0.90, 0.85), cover(abs(r - 0.88) - 0.025));
+  float ticks = 1e9;
+  for (int i = 0; i < 12; i++) {
+    vec2 q = turn(float(i) * 0.523599) * uv;
+    q.y -= clamp(q.y, i % 3 == 0 ? 0.66 : 0.74, 0.80);
+    ticks = min(ticks, length(q) - 0.015);
+  }
+  col = mix(col, vec3(0.92, 0.90, 0.85), cover(ticks));
+  col = mix(col, vec3(0.92, 0.90, 0.85), cover(hand(uv, 6.28318 * u_time / 20.0, 0.45) - 0.04));
+  col = mix(col, vec3(0.90, 0.22, 0.20), cover(hand(uv, 6.28318 * u_time / 5.0, 0.72) - 0.012));
+  col = mix(col, vec3(0.90, 0.22, 0.20), cover(r - 0.05));
+  fragColor = vec4(col, 1.0);
+}
+`,
+        },
+        {
+          label: 'hand-fn',
+          src: `${HEADER}
+const vec3 IVORY = vec3(0.92, 0.90, 0.85);
+const vec3 RED = vec3(0.90, 0.22, 0.20);
+
+float segment(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
+}
+
+// A hand that turns once every \`period\` seconds, clockwise from 12.
+float hand(vec2 p, float period, float len) {
+  float a = 6.28318 * u_time / period;
+  return segment(p, vec2(0.0), vec2(sin(a), cos(a)) * len);
+}
+
+float fill(float d) {
+  return 1.0 - smoothstep(-0.006, 0.006, d);
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float r = length(uv);
+  vec3 color = mix(vec3(0.08, 0.09, 0.14), vec3(0.14, 0.16, 0.24), fill(r - 0.88));
+  color = mix(color, IVORY, fill(abs(r - 0.88) - 0.025));
+  float ticks = 1e9;
+  for (int i = 0; i < 12; i++) {
+    float a = float(i) * 0.523599;
+    vec2 dir = vec2(sin(a), cos(a));
+    ticks = min(ticks, segment(uv, dir * ((i % 3 == 0) ? 0.66 : 0.74), dir * 0.80) - 0.015);
+  }
+  color = mix(color, IVORY, fill(ticks));
+  color = mix(color, IVORY, fill(hand(uv, 20.0, 0.45) - 0.04));
+  color = mix(color, RED, fill(hand(uv, 5.0, 0.72) - 0.012));
+  color = mix(color, RED, fill(r - 0.05));
+  fragColor = vec4(color, 1.0);
+}
+`,
+        },
+        {
+          label: 'masks-first',
+          src: `${HEADER}
+float seg(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
+float mask(float d) {
+  return 1.0 - smoothstep(-0.006, 0.006, d);
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float r = length(uv);
+
+  float dial = mask(r - 0.88);
+  float rim = mask(abs(r - 0.88) - 0.025);
+  float d = 1e9;
+  for (int i = 0; i < 12; i++) {
+    float a = 0.523599 * float(i);
+    vec2 dir = vec2(sin(a), cos(a));
+    float inner = mod(float(i), 3.0) == 0.0 ? 0.66 : 0.74;
+    d = min(d, seg(uv, inner * dir, 0.80 * dir) - 0.015);
+  }
+  float ticks = mask(d);
+  float hs = 6.28318 * u_time / 20.0;
+  float hl = 6.28318 * u_time / 5.0;
+  float shortHand = mask(seg(uv, vec2(0.0), 0.45 * vec2(sin(hs), cos(hs))) - 0.04);
+  float longHand = mask(seg(uv, vec2(0.0), 0.72 * vec2(sin(hl), cos(hl))) - 0.012);
+  float hub = mask(r - 0.05);
+
+  vec3 ivory = vec3(0.92, 0.90, 0.85);
+  vec3 red = vec3(0.90, 0.22, 0.20);
+  vec3 c = mix(vec3(0.08, 0.09, 0.14), vec3(0.14, 0.16, 0.24), dial);
+  c = mix(c, ivory, rim);
+  c = mix(c, ivory, ticks);
+  c = mix(c, ivory, shortHand);
+  c = mix(c, red, longHand);
+  c = mix(c, red, hub);
+  fragColor = vec4(c, 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+float segmentSDF(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
+vec2 clockDir(float turns) {
+  float a = 6.28318 * turns;
+  return vec2(sin(a), cos(a));
+}
+
+float fill(float d) {
+  return 1.0 - smoothstep(-0.006, 0.006, d);
+}
+
+void main() {
+  vec2 st = gl_FragCoord.xy - 0.5 * u_resolution;
+  st /= 0.5 * min(u_resolution.x, u_resolution.y);
+  float r = length(st);
+  vec3 color = mix(vec3(0.08, 0.09, 0.14), vec3(0.14, 0.16, 0.24), fill(r - 0.88));
+  color = mix(color, vec3(0.92, 0.90, 0.85), fill(abs(r - 0.88) - 0.025));
+  float ticks = 1e9;
+  for (int i = 0; i < 12; i++) {
+    vec2 dir = vec2(sin(float(i) * 0.523599), cos(float(i) * 0.523599));
+    ticks = min(ticks, segmentSDF(st, dir * ((i % 3 == 0) ? 0.66 : 0.74), dir * 0.80) - 0.015);
+  }
+  color = mix(color, vec3(0.92, 0.90, 0.85), fill(ticks));
+  color = mix(color, vec3(0.92, 0.90, 0.85), fill(segmentSDF(st, vec2(0.0), clockDir(u_time / 20.0) * 0.45) - 0.04));
+  color = mix(color, vec3(0.90, 0.22, 0.20), fill(segmentSDF(st, vec2(0.0), clockDir(u_time / 5.0) * 0.72) - 0.012));
+  color = mix(color, vec3(0.90, 0.22, 0.20), fill(r - 0.05));
+  fragColor = vec4(color, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      wrong: [
+        {
+          label: 'speed-5',
+          edits: [
+            ['u_time / 20.0', 'u_time / 19.0'],
+            ['u_time / 5.0', 'u_time / 4.75'],
+          ],
+        },
+        { label: 'counter-clockwise', edits: [['return vec2(sin(angle), cos(angle));', 'return vec2(-sin(angle), cos(angle));']] },
+        {
+          label: 'swapped-speeds',
+          edits: [
+            ['u_time / 20.0', 'u_time / 5.0'],
+            ['u_time / 5.0) * 0.72', 'u_time / 20.0) * 0.72'],
+          ],
+        },
+        { label: 'start-at-three', edits: [['6.28318 * u_time / 20.0', '6.28318 * u_time / 20.0 + 1.5708']] },
+        { label: 'no-ticks', edits: [['color = mix(color, ivory, fill(ticks));', '']] },
+        { label: 'all-long-ticks', edits: [['(i % 3 == 0) ? 0.66 : 0.74', '0.66']] },
+        { label: 'no-rim', edits: [['color = mix(color, ivory, fill(abs(r - 0.88) - 0.025));', '']] },
+      ],
+      staticFrame: true,
+      injectMild: injectFrom(almost, 'ivory'),
+      injectBorderline: [
+        { label: 'inject-long-phase', edits: [['6.28318 * u_time / 5.0', '6.28318 * u_time / 5.0 + 0.15']] },
+        { label: 'inject-thick', edits: [['shortTip) - 0.04', 'shortTip) - 0.055']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── lava-lamp (expert, combining boss, animated) ────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'orange', edits: [['vec3(1.00, 0.42, 0.12)', 'vec3(1.00, 0.43, 0.12)']] },
+      { label: 'yellow', edits: [['vec3(1.00, 0.85, 0.35)', 'vec3(1.00, 0.86, 0.34)']] },
+      { label: 'background', edits: [['vec3(0.16, 0.05, 0.22)', 'vec3(0.162, 0.05, 0.218)']] },
+      { label: 'glow-strength', edits: [['orange * 0.45', 'orange * 0.46']] },
+      { label: 'glow-falloff', edits: [['exp(-8.0 *', 'exp(-8.2 *']] },
+      { label: 'blend-up', edits: [['smin(smin(da, db, 0.40), dc, 0.40)', 'smin(smin(da, db, 0.42), dc, 0.42)']] },
+      { label: 'radius-a', edits: [['- 0.26;', '- 0.263;']] },
+      { label: 'phase-b', edits: [['u_time / 8.0 + 2.0)', 'u_time / 8.0 + 2.01)']] },
+      { label: 'blob-x', edits: [['vec2(-0.30,', 'vec2(-0.305,']] },
+      { label: 'wax-depth', edits: [['smoothstep(0.0, 0.15, -d)', 'smoothstep(0.0, 0.16, -d)']] },
+    ];
+    const BLOBS = `float w = 6.28318;
+  vec2 a = vec2(-0.30, 0.50 * sin(w * u_time / 10.0));
+  vec2 b = vec2(0.28, 0.55 * sin(w * u_time / 8.0 + 2.0));
+  vec2 c = vec2(0.00, 0.60 * sin(w * u_time / 12.0 + 4.0));`;
+    return {
+      slug: 'lava-lamp',
+      others: ['smooth-union', 'glow', 'polka-dots'],
+      renames: { uv: 'st', w: 'tau', da: 'distA', db: 'distB', dc: 'distC', bg: 'background', wax: 'waxColor', color: 'col' },
+      handCorrect: [
+        {
+          label: 'mix-smin',
+          src: `${HEADER}
+${SMIN_MIX_GLSL}
+
+void main() {
+  vec2 uv = gl_FragCoord.xy - 0.5 * u_resolution;
+  uv /= 0.5 * min(u_resolution.x, u_resolution.y);
+  ${BLOBS}
+  float d = smin(smin(length(uv - a) - 0.26, length(uv - b) - 0.22, 0.40), length(uv - c) - 0.18, 0.40);
+  vec3 orange = vec3(1.00, 0.42, 0.12);
+  vec3 col = vec3(0.16, 0.05, 0.22) + orange * 0.45 * exp(-8.0 * max(d, 0.0));
+  vec3 wax = mix(orange, vec3(1.00, 0.85, 0.35), smoothstep(0.0, 0.15, -d));
+  fragColor = vec4(mix(col, wax, 1.0 - smoothstep(-0.008, 0.008, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'blob-fn',
+          src: `${HEADER}
+float smin(float a, float b, float k) {
+  float h = max(k - abs(a - b), 0.0) / k;
+  return min(a, b) - h * h * k * 0.25;
+}
+
+// A circle of radius r at x that bobs with the given amplitude, period and phase.
+float blob(vec2 p, float x, float amp, float period, float phase, float r) {
+  vec2 c = vec2(x, amp * sin(6.28318 * u_time / period + phase));
+  return length(p - c) - r;
+}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  float d = blob(uv, -0.30, 0.50, 10.0, 0.0, 0.26);
+  d = smin(d, blob(uv, 0.28, 0.55, 8.0, 2.0, 0.22), 0.40);
+  d = smin(d, blob(uv, 0.00, 0.60, 12.0, 4.0, 0.18), 0.40);
+  vec3 color = vec3(0.16, 0.05, 0.22) + vec3(1.00, 0.42, 0.12) * 0.45 * exp(-8.0 * max(d, 0.0));
+  float inside = 1.0 - smoothstep(-0.008, 0.008, d);
+  color = mix(color, mix(vec3(1.00, 0.42, 0.12), vec3(1.00, 0.85, 0.35), smoothstep(0.0, 0.15, -d)), inside);
+  fragColor = vec4(color, 1.0);
+}
+`,
+        },
+        {
+          label: 'vec3-dists',
+          src: `${HEADER}
+float smin(float a, float b, float k) {
+  float h = max(k - abs(a - b), 0.0) / k;
+  return min(a, b) - h * h * k * 0.25;
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  ${BLOBS}
+  vec3 dists = vec3(length(uv - a), length(uv - b), length(uv - c)) - vec3(0.26, 0.22, 0.18);
+  float d = smin(smin(dists.x, dists.y, 0.40), dists.z, 0.40);
+  vec3 bg = vec3(0.16, 0.05, 0.22);
+  vec3 orange = vec3(1.00, 0.42, 0.12);
+  vec3 glow = orange * 0.45 * exp(-8.0 * max(d, 0.0));
+  vec3 wax = orange + (vec3(1.00, 0.85, 0.35) - orange) * smoothstep(0.0, 0.15, -d);
+  fragColor = vec4(mix(bg + glow, wax, 1.0 - smoothstep(-0.008, 0.008, d)), 1.0);
+}
+`,
+        },
+        {
+          label: 'tau-const',
+          src: `${HEADER}
+const float TAU = 6.28318;
+const vec3 BG = vec3(0.16, 0.05, 0.22);
+const vec3 ORANGE = vec3(1.00, 0.42, 0.12);
+const vec3 YELLOW = vec3(1.00, 0.85, 0.35);
+
+float smin(float a, float b, float k) {
+  float h = max(k - abs(a - b), 0.0) / k;
+  return min(a, b) - h * h * k * 0.25;
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float ya = 0.50 * sin(TAU * u_time / 10.0);
+  float yb = 0.55 * sin(TAU * u_time / 8.0 + 2.0);
+  float yc = 0.60 * sin(TAU * u_time / 12.0 + 4.0);
+  float d = smin(length(uv - vec2(-0.30, ya)) - 0.26, length(uv - vec2(0.28, yb)) - 0.22, 0.40);
+  d = smin(d, length(uv - vec2(0.00, yc)) - 0.18, 0.40);
+  vec3 color = BG + ORANGE * 0.45 * exp(-8.0 * max(d, 0.0));
+  color = mix(color, mix(ORANGE, YELLOW, smoothstep(0.0, 0.15, -d)), 1.0 - smoothstep(-0.008, 0.008, d));
+  fragColor = vec4(color, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'speed-5', edits: [['u_time / 10.0', 'u_time / 9.5']] },
+        { label: 'hard-union', edits: [['smin(smin(da, db, 0.40), dc, 0.40)', 'min(min(da, db), dc)']] },
+        { label: 'no-glow', edits: [['vec3 color = bg + orange * 0.45 * exp(-8.0 * max(d, 0.0));', 'vec3 color = bg;']] },
+        { label: 'sideways', edits: [['vec2(-0.30, 0.50 * sin(w * u_time / 10.0))', 'vec2(-0.30 + 0.50 * sin(w * u_time / 10.0), 0.0)']] },
+        { label: 'green-wax', edits: [['vec3 orange = vec3(1.00, 0.42, 0.12);', 'vec3 orange = vec3(0.20, 0.80, 0.30);']] },
+        {
+          label: 'in-phase',
+          edits: [
+            ['u_time / 8.0 + 2.0)', 'u_time / 8.0)'],
+            ['u_time / 12.0 + 4.0)', 'u_time / 12.0)'],
+          ],
+        },
+      ],
+      staticFrame: true,
+      injectMild: injectFrom(almost, 'orange'),
+      injectBorderline: [
+        { label: 'inject-blend', edits: [['smin(smin(da, db, 0.40), dc, 0.40)', 'smin(smin(da, db, 0.6), dc, 0.6)']] },
+        { label: 'inject-phase', edits: [['u_time / 8.0 + 2.0)', 'u_time / 8.0 + 2.4)']] },
+      ],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── woven-truchet (expert, patterns boss, animated) ─────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'rope', edits: [['vec3(0.85, 0.62, 0.25)', 'vec3(0.855, 0.62, 0.245)']] },
+      { label: 'highlight', edits: [['vec3(1.0, 0.92, 0.70)', 'vec3(1.0, 0.93, 0.69)']] },
+      { label: 'background', edits: [['vec3(0.05, 0.20, 0.22)', 'vec3(0.052, 0.20, 0.218)']] },
+      { label: 'outline-color', edits: [['vec3(0.03, 0.06, 0.07)', 'vec3(0.035, 0.06, 0.065)']] },
+      { label: 'outline-width', edits: [['fill(d - 0.15)', 'fill(d - 0.153)']] },
+      { label: 'strand-width', edits: [['fill(d - 0.10)', 'fill(d - 0.101)']] },
+      { label: 'shine-width', edits: [['smoothstep(0.0, 0.12, abs(s - 0.5))', 'smoothstep(0.0, 0.125, abs(s - 0.5))']] },
+      { label: 'shine-phase', edits: [['u_time / 12.0)', 'u_time / 12.0 + 0.005)']] },
+      { label: 'aa', edits: [['smoothstep(-0.01, 0.01, d)', 'smoothstep(-0.011, 0.011, d)']] },
+      { label: 'band-angle', edits: [['(p.x + p.y) * 0.25', '(p.x + p.y) * 0.252']] },
+    ];
+    const SETUP = `vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 2.5;
+  ivec2 id = ivec2(floor(p));
+  vec2 f = fract(p) - 0.5;
+  float s = fract((p.x + p.y) * 0.25 - u_time / 12.0);
+  vec3 rope = mix(vec3(0.85, 0.62, 0.25), vec3(1.0, 0.92, 0.70), 1.0 - smoothstep(0.0, 0.12, abs(s - 0.5)));`;
+    const PAINT = `float cover(float d) {
+  return 1.0 - smoothstep(-0.01, 0.01, d);
+}
+
+vec3 paint(vec3 col, float d, vec3 rope) {
+  col = mix(col, vec3(0.03, 0.06, 0.07), cover(d - 0.15));
+  return mix(col, rope, cover(d - 0.10));
+}`;
+    return {
+      slug: 'woven-truchet',
+      others: ['truchet', 'bricks', 'hex-grid'],
+      renames: { uv: 'st', id: 'cell', f: 'local', s: 'band', shine: 'gloss', rope: 'ropeColor', color: 'col', kind: 'tile' },
+      handCorrect: [
+        {
+          label: 'select-strands',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${PAINT}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 p = 2.5 * uv;
+  ivec2 id = ivec2(floor(p));
+  vec2 f = fract(p) - 0.5;
+  float band = fract(0.25 * (p.x + p.y) - u_time / 12.0);
+  vec3 rope = mix(vec3(0.85, 0.62, 0.25), vec3(1.0, 0.92, 0.70), 1.0 - smoothstep(0.0, 0.12, abs(band - 0.5)));
+  vec3 col = vec3(0.05, 0.20, 0.22);
+  uint kind = pcg(pcg(uint(id.x)) + uint(id.y)) % 3u;
+  if (kind == 2u) {
+    if (((id.x + id.y) & 1) == 0) {
+      col = paint(col, abs(f.x), rope);
+      col = paint(col, abs(f.y), rope);
+    } else {
+      col = paint(col, abs(f.y), rope);
+      col = paint(col, abs(f.x), rope);
+    }
+  } else {
+    vec2 c = kind == 0u ? vec2(0.5) : vec2(0.5, -0.5);
+    col = paint(col, min(abs(length(f - c) - 0.5), abs(length(f + c) - 0.5)), rope);
+  }
+  fragColor = vec4(col, 1.0);
+}
+`,
+        },
+        {
+          label: 'switch-kind',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${PAINT}
+
+void main() {
+  ${SETUP}
+  vec3 col = vec3(0.05, 0.20, 0.22);
+  bool acrossOnTop = ((id.x + id.y) & 1) == 0;
+  switch (int(pcg(pcg(uint(id.x)) + uint(id.y)) % 3u)) {
+    case 0:
+      col = paint(col, min(abs(length(f - vec2(0.5)) - 0.5), abs(length(f + vec2(0.5)) - 0.5)), rope);
+      break;
+    case 1:
+      col = paint(col, min(abs(length(f - vec2(0.5, -0.5)) - 0.5), abs(length(f + vec2(0.5, -0.5)) - 0.5)), rope);
+      break;
+    default:
+      col = paint(col, acrossOnTop ? abs(f.x) : abs(f.y), rope);
+      col = paint(col, acrossOnTop ? abs(f.y) : abs(f.x), rope);
+      break;
+  }
+  fragColor = vec4(col, 1.0);
+}
+`,
+        },
+        {
+          label: 'mirror-arcs',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${PAINT}
+
+// Arcs around the top-right and bottom-left corners. Kind 1 mirrors f.y first,
+// which turns them into arcs around the other two corners.
+float arcs(vec2 f) {
+  return min(abs(length(f - 0.5) - 0.5), abs(length(f + 0.5) - 0.5));
+}
+
+void main() {
+  ${SETUP}
+  vec3 col = vec3(0.05, 0.20, 0.22);
+  uint kind = pcg(pcg(uint(id.x)) + uint(id.y)) % 3u;
+  if (kind == 2u) {
+    bool acrossOnTop = ((id.x + id.y) & 1) == 0;
+    col = paint(col, acrossOnTop ? abs(f.x) : abs(f.y), rope);
+    col = paint(col, acrossOnTop ? abs(f.y) : abs(f.x), rope);
+  } else {
+    if (kind == 1u) f.y = -f.y;
+    col = paint(col, arcs(f), rope);
+  }
+  fragColor = vec4(col, 1.0);
+}
+`,
+        },
+        {
+          label: 'rope-fn',
+          src: `${HEADER}
+${PCG_GLSL}
+
+float fill(float d) {
+  return 1.0 - smoothstep(-0.01, 0.01, d);
+}
+
+// The rope color at p: gold, with a pale band sweeping across every 12 seconds.
+vec3 ropeColor(vec2 p) {
+  float s = fract((p.x + p.y) * 0.25 - u_time / 12.0);
+  float shine = 1.0 - smoothstep(0.0, 0.12, abs(s - 0.5));
+  return mix(vec3(0.85, 0.62, 0.25), vec3(1.0, 0.92, 0.70), shine);
+}
+
+vec3 strand(vec3 color, float d, vec3 rope) {
+  color = mix(color, vec3(0.03, 0.06, 0.07), fill(d - 0.15));
+  return mix(color, rope, fill(d - 0.10));
+}
+
+void main() {
+  vec2 st = gl_FragCoord.xy - 0.5 * u_resolution;
+  st /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec2 p = st * 2.5;
+  ivec2 id = ivec2(floor(p));
+  vec2 f = fract(p) - 0.5;
+  vec3 rope = ropeColor(p);
+  vec3 color = vec3(0.05, 0.20, 0.22);
+  uint kind = pcg(pcg(uint(id.x)) + uint(id.y)) % 3u;
+  if (kind == 2u) {
+    bool acrossOnTop = ((id.x + id.y) & 1) == 0;
+    color = strand(color, acrossOnTop ? abs(f.x) : abs(f.y), rope);
+    color = strand(color, acrossOnTop ? abs(f.y) : abs(f.x), rope);
+  } else {
+    vec2 c = (kind == 0u) ? vec2(0.5, 0.5) : vec2(0.5, -0.5);
+    color = strand(color, min(abs(length(f - c) - 0.5), abs(length(f + c) - 0.5)), rope);
+  }
+  fragColor = vec4(color, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'other-seed', edits: [['pcg(pcg(uint(id.x)) + uint(id.y))', 'pcg(pcg(uint(id.x) + 7u) + uint(id.y))']] },
+        { label: 'no-crossings', edits: [['% 3u', '% 2u']] },
+        { label: 'no-weave', edits: [['bool acrossOnTop = ((id.x + id.y) & 1) == 0;', 'bool acrossOnTop = true;']] },
+        { label: 'no-outline', edits: [['color = mix(color, vec3(0.03, 0.06, 0.07), fill(d - 0.15));', '']] },
+        { label: 'dense', edits: [['uv * 2.5', 'uv * 3.5']] },
+        { label: 'speed-5', edits: [['u_time / 12.0', 'u_time / 11.4']] },
+      ],
+      staticFrame: true,
+      handAdversarial: [{ label: 'kind-table', src: wovenKindTable() }],
+      injectMild: injectFrom(almost, 'rope'),
+      injectBorderline: [{ label: 'inject-wide', edits: [['fill(d - 0.10)', 'fill(d - 0.12)']] }],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── domain-warp (expert, noise boss, animated) ──────────────────────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'ink', edits: [['vec3(0.05, 0.03, 0.18)', 'vec3(0.055, 0.03, 0.175)']] },
+      { label: 'magenta', edits: [['vec3(0.75, 0.20, 0.45)', 'vec3(0.76, 0.20, 0.44)']] },
+      { label: 'gold', edits: [['vec3(1.00, 0.85, 0.55)', 'vec3(1.00, 0.86, 0.54)']] },
+      { label: 'low-edge', edits: [['smoothstep(0.40, 0.55, v)', 'smoothstep(0.405, 0.555, v)']] },
+      { label: 'high-edge', edits: [['smoothstep(0.58, 0.72, v)', 'smoothstep(0.585, 0.725, v)']] },
+      { label: 'drift-phase', edits: [['u_time / 16.0;', 'u_time / 16.0 + 0.02;']] },
+      { label: 'drift-radius', edits: [['0.3 * vec2(cos(a), sin(a))', '0.305 * vec2(cos(a), sin(a))']] },
+      { label: 'warp-strength', edits: [['fbm(p + 2.0 * r)', 'fbm(p + 2.01 * r)']] },
+      { label: 'zoom', edits: [['uv * 1.2', 'uv * 1.21']] },
+      { label: 'gain', edits: [['sum / 0.9375', 'sum / 0.94']] },
+    ];
+    return {
+      slug: 'domain-warp',
+      others: ['marble', 'fbm-clouds', 'value-noise'],
+      renames: { uv: 'st', drift: 'offset', q: 'warp1', r: 'warp2', v: 'value', ink: 'deep', magenta: 'mid', gold: 'high', color: 'col', sum: 'total', amp: 'weight' },
+      handCorrect: [
+        {
+          label: 'unrolled-fbm',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+float fbm(vec2 p) {
+  return (0.5 * noise(p) + 0.25 * noise(p * 2.0) + 0.125 * noise(p * 4.0) + 0.0625 * noise(p * 8.0)) / 0.9375;
+}
+
+${DOMAIN_WARP_COLOR_GLSL}
+
+void main() {
+  vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.x, u_resolution.y);
+  vec2 p = 1.2 * uv;
+  float a = 6.28318 * u_time / 16.0;
+  vec2 drift = 0.3 * vec2(cos(a), sin(a));
+  vec2 q = vec2(fbm(p + drift), fbm(p + drift + vec2(5.2, 1.3)));
+  vec2 s = p + 2.0 * q + vec2(1.7, 9.2);
+  vec2 r = vec2(fbm(s), fbm(s + vec2(5.2, 1.3)));
+  fragColor = vec4(inkToGold(fbm(p + 2.0 * r)), 1.0);
+}
+`,
+        },
+        {
+          label: 'pattern-fn',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+${DOMAIN_WARP_FBM_GLSL}
+
+// Three fBm lookups, each one read where the previous one points.
+float pattern(vec2 p, vec2 drift) {
+  vec2 q = fbm2(p + drift);
+  vec2 r = fbm2(p + 2.0 * q + vec2(1.7, 9.2));
+  return fbm(p + 2.0 * r);
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  float a = 6.28318 * u_time / 16.0;
+  float v = pattern(uv * 1.2, vec2(cos(a), sin(a)) * 0.3);
+  vec3 color = mix(vec3(0.05, 0.03, 0.18), vec3(0.75, 0.20, 0.45), smoothstep(0.40, 0.55, v));
+  color = mix(color, vec3(1.00, 0.85, 0.55), smoothstep(0.58, 0.72, v));
+  fragColor = vec4(color, 1.0);
+}
+`,
+        },
+        {
+          label: 'manual-centering',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+${DOMAIN_WARP_FBM_GLSL}
+
+${DOMAIN_WARP_COLOR_GLSL}
+
+void main() {
+  vec2 st = gl_FragCoord.xy - 0.5 * u_resolution;
+  st /= 0.5 * min(u_resolution.x, u_resolution.y);
+  vec2 p = st * 1.2;
+  float angle = 6.28318 * u_time / 16.0;
+  vec2 q = fbm2(p + vec2(0.3 * cos(angle), 0.3 * sin(angle)));
+  vec2 r = fbm2(p + 2.0 * q + vec2(1.7, 9.2));
+  fragColor = vec4(inkToGold(fbm(p + 2.0 * r)), 1.0);
+}
+`,
+        },
+        {
+          label: 'lerp-colors',
+          src: `${HEADER}
+${PCG_GLSL}
+
+${VALUE_NOISE_GLSL}
+
+${DOMAIN_WARP_FBM_GLSL}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 1.2;
+  float a = 6.28318 * u_time / 16.0;
+  vec2 q = fbm2(p + 0.3 * vec2(cos(a), sin(a)));
+  vec2 r = fbm2(p + 2.0 * q + vec2(1.7, 9.2));
+  float v = fbm(p + 2.0 * r);
+  vec3 ink = vec3(0.05, 0.03, 0.18);
+  vec3 magenta = vec3(0.75, 0.20, 0.45);
+  vec3 gold = vec3(1.00, 0.85, 0.55);
+  vec3 color = ink + (magenta - ink) * smoothstep(0.40, 0.55, v);
+  color += (gold - color) * smoothstep(0.58, 0.72, v);
+  fragColor = vec4(color, 1.0);
+}
+`,
+        },
+      ],
+      almost,
+      genWrong: ['mirror-x'],
+      wrong: [
+        { label: 'other-seed', edits: [['pcg(pcg(uint(c.x)) + uint(c.y))', 'pcg(pcg(uint(c.x) + 7u) + uint(c.y))']] },
+        { label: 'no-warp', edits: [['float v = fbm(p + 2.0 * r);', 'float v = fbm(p + drift);']] },
+        { label: 'one-warp', edits: [['float v = fbm(p + 2.0 * r);', 'float v = fbm(p + 2.0 * q);']] },
+        { label: 'speed-5', edits: [['u_time / 16.0', 'u_time / 15.2']] },
+        { label: 'reversed', edits: [['vec2(cos(a), sin(a))', 'vec2(cos(a), -sin(a))']] },
+        { label: 'two-octaves', edits: [['o < 4', 'o < 2']] },
+      ],
+      staticFrame: true,
+      handAdversarial: [
+        {
+          label: 'sin-hash-default',
+          src: noiseSinHash(`${VALUE_NOISE_GLSL}
+
+${DOMAIN_WARP_FBM_GLSL}
+
+${DOMAIN_WARP_COLOR_GLSL}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+  vec2 p = uv * 1.2;
+  float a = 6.28318 * u_time / 16.0;
+  vec2 q = fbm2(p + 0.3 * vec2(cos(a), sin(a)));
+  vec2 r = fbm2(p + 2.0 * q + vec2(1.7, 9.2));
+  fragColor = vec4(inkToGold(fbm(p + 2.0 * r)), 1.0);
+}
+`),
+        },
+      ],
+      injectMild: injectFrom(almost, 'magenta'),
+      injectBorderline: [{ label: 'inject-edge', edits: [['smoothstep(0.40, 0.55, v)', 'smoothstep(0.44, 0.59, v)']] }],
+    } satisfies ChallengeSpec;
+  })(),
+
+  // ─── the-full-scene (expert, raymarching boss, animated, blur) ───────────
+  (() => {
+    const almost: Edit[] = [
+      { label: 'light-phase', edits: [['u_time / 16.0;', 'u_time / 16.0 + 0.02;']] },
+      { label: 'fog-up', edits: [['-0.06 * t', '-0.062 * t']] },
+      { label: 'fog-tint', edits: [['vec3 fogColor = vec3(0.62, 0.70, 0.80);', 'vec3 fogColor = vec3(0.62, 0.70, 0.805);']] },
+      { label: 'k-up', edits: [['3.0 * h / t', '3.3 * h / t']] },
+      { label: 'ao-up', edits: [['2.5 * occ', '2.6 * occ']] },
+      { label: 'camera-back', edits: [['vec3(0.0, 3.5, 4.5)', 'vec3(0.0, 3.5, 4.53)']] },
+      { label: 'blob-tone', edits: [['vec3(0.30, 0.75, 0.55)', 'vec3(0.31, 0.75, 0.54)']] },
+      { label: 'floor-tone', edits: [['vec3(0.92, 0.88, 0.80)', 'vec3(0.925, 0.88, 0.795)']] },
+      { label: 'sky-mix', edits: [['0.25 * sky * ao + 0.75 * diff * shadow', '0.26 * sky * ao + 0.74 * diff * shadow']] },
+      { label: 'blend-up', edits: [['smin(a, b, 0.5)', 'smin(a, b, 0.52)']] },
+    ];
+    return {
+      slug: 'the-full-scene',
+      others: ['soft-shadow', 'ambient-occlusion', 'smooth-blobs', 'hard-shadow'],
+      renames: { ro: 'eye', rd: 'dir', ww: 'fwd', uu: 'right', vv: 'up', hit: 'found', shadow: 'lit', albedo: 'base', ao: 'occlusion', occ: 'blocked', res: 'penumbra' },
+      handCorrect: [
+        { label: 'mix-smin', src: marchVariant(FULL_SCENE, 'for') },
+        { label: 'while-loop', src: marchVariant(FULL_SCENE, 'while') },
+        { label: 'early-return', src: marchVariant(FULL_SCENE, 'early') },
+        { label: 'tetra-normal', src: marchVariant(FULL_SCENE, 'tetra') },
+      ],
+      almost,
+      wrong: [
+        { label: 'no-shadow', edits: [['float shadow = softShadow(p + n * 0.01, l);', 'float shadow = 1.0;']] },
+        { label: 'no-ao', edits: [['float ao = ambientOcclusion(p, n);', 'float ao = 1.0;']] },
+        { label: 'no-fog', edits: [['color = mix(color, fogColor, 1.0 - exp(-0.06 * t));', '']] },
+        { label: 'speed-5', edits: [['u_time / 16.0', 'u_time / 15.2']] },
+        { label: 'reversed', edits: [['1.5 * sin(a)', '-1.5 * sin(a)']] },
+        { label: 'red-blob', edits: [['vec3(0.30, 0.75, 0.55)', 'vec3(0.85, 0.25, 0.20)']] },
+      ],
+      staticFrame: true,
+      injectMild: injectFrom(almost, 'blob-tone'),
+      injectBorderline: [
+        { label: 'inject-fog', edits: [['-0.06 * t', '-0.09 * t']] },
+        { label: 'inject-light-phase', edits: [['u_time / 16.0;', 'u_time / 16.0 + 0.25;']] },
       ],
     } satisfies ChallengeSpec;
   })(),

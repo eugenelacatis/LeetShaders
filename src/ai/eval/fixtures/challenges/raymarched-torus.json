@@ -5,6 +5,6 @@
   "description": "Raymarch a lit torus. The canvas runs from -1 to 1. Camera: ro = (0, 0, 3), rd = normalize(vec3(uv, -1.0)). March up to 64 steps with t += d, hit when d < 0.001, give up when t > 10. The scene is one torus. Before measuring, tip it: p.yz = rot(p.yz, 1.0), then p.xy = rot(p.xy, 0.4), where rot(v, a) = vec2(cos(a) * v.x - sin(a) * v.y, sin(a) * v.x + cos(a) * v.y). Torus distance: q = vec2(length(p.xz) - 0.8, p.y), d = length(q) - 0.3. Take the normal from central differences with eps 0.001, using the same tipped scene. Light direction l = normalize(vec3(-0.4, 0.7, 0.6)), diffuse = max(dot(n, l), 0.0). A hit is pink (0.90, 0.35, 0.55) * (0.15 + 0.85 * diffuse), plus a white highlight: v = normalize(ro - p), r = reflect(-l, n), add pow(max(dot(r, v), 0.0), 32.0) * 0.5. A miss is (0.09, 0.06, 0.10).",
   "difficulty": "advanced",
   "track": "raymarching",
-  "tolerance": 50,
+  "tolerance": 6,
   "useBlur": true
 }

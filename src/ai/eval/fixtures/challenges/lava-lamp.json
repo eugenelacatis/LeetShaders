@@ -1,0 +1,10 @@
+{
+  "id": "lava-lamp",
+  "slug": "lava-lamp",
+  "title": "Lava Lamp",
+  "description": "Make a lava lamp from three blobs that bob up and down and melt together. The canvas runs from -1 to 1 (aspect-corrected, centred). Blob A has radius 0.26 and centre (-0.30, 0.50 * sin(6.28318 * u_time / 10.0)). Blob B has radius 0.22 and centre (0.28, 0.55 * sin(6.28318 * u_time / 8.0 + 2.0)). Blob C has radius 0.18 and centre (0.00, 0.60 * sin(6.28318 * u_time / 12.0 + 4.0)). Join them with the polynomial smooth minimum smin(a, b, k): h = max(k - abs(a - b), 0) / k, and the result is min(a, b) - h * h * k * 0.25. The wax distance is d = smin(smin(A, B, 0.4), C, 0.4). Start from the background (0.16, 0.05, 0.22) and add a glow, orange (1.00, 0.42, 0.12) * 0.45 * exp(-8.0 * max(d, 0.0)). The wax is mix(orange, yellow, smoothstep(0.0, 0.15, -d)) with yellow (1.00, 0.85, 0.35), and it covers the glow by 1 - smoothstep(-0.008, 0.008, d).",
+  "difficulty": "expert",
+  "track": "combining",
+  "tolerance": 50,
+  "useBlur": false
+}
