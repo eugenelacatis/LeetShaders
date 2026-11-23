@@ -1,0 +1,11 @@
+{
+  "id": "ba16aaf8-ee20-42aa-a7d1-d153fe3a5805",
+  "slug": "cosine-sunset",
+  "title": "Cosine Sunset",
+  "description": "Paint an animated sunset with one cosine palette. The canvas runs from -1 to 1 (aspect-corrected, centred). The palette is pal(t) = a + b * cos(6.28318 * (c * t + d)) with a = (0.5, 0.5, 0.5), b = (0.5, 0.5, 0.5), c = (1, 1, 1) and d = (0.00, 0.10, 0.20). The sky is pal(0.30 + 0.25 * uv.y) and never moves. The sun is centred at (0, -0.6). With r its distance, the sun's rings are pal(2.0 * r - u_time / 8.0), so they flow outward and repeat every 8 seconds. Blend from the rings to the sky with smoothstep(0.35, 0.75, r).",
+  "difficulty": "expert",
+  "track": "color",
+  "tolerance": 50,
+  "useBlur": false,
+  "hintText": "Write the palette as a function of one float. The sky feeds it height, the sun feeds it distance. Subtracting time from the distance before the palette sees it is what makes the rings travel outward."
+}

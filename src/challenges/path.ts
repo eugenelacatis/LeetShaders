@@ -14,6 +14,7 @@ export const PATH_ORDER: readonly string[] = [
   'vignette',
   'golden-hour',
   'hsv-color-wheel',
+  'cosine-sunset',
   // shapes
   'circle-sdf',
   'ring',
@@ -24,6 +25,7 @@ export const PATH_ORDER: readonly string[] = [
   'star',
   'heart',
   'crescent-moon',
+  'clock-face',
   // combining
   'union',
   'intersection',
@@ -33,6 +35,7 @@ export const PATH_ORDER: readonly string[] = [
   'outlined-shape',
   'glow',
   'drop-shadow',
+  'lava-lamp',
   // patterns
   'stripes',
   'zigzag',
@@ -45,6 +48,7 @@ export const PATH_ORDER: readonly string[] = [
   'truchet',
   'polar-pattern',
   'kaleidoscope',
+  'woven-truchet',
   // noise
   'white-noise',
   'value-noise',
@@ -52,6 +56,7 @@ export const PATH_ORDER: readonly string[] = [
   'worley-cracks',
   'fbm-clouds',
   'marble',
+  'domain-warp',
   // raymarching
   'raymarched-sphere',
   'raymarched-box',
@@ -64,6 +69,7 @@ export const PATH_ORDER: readonly string[] = [
   'repeated-spheres',
   'fog',
   'reflections',
+  'the-full-scene',
 ];
 
 export const RANK: Record<Challenge['difficulty'], number> = {
