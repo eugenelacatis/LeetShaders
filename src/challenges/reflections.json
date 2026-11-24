@@ -5,7 +5,7 @@
   "description": "Raymarch two spheres on a mirror floor. The canvas runs from -1 to 1. Camera: ro = (0, 3.2, 4.5), looking at (0, 0, 0). Use ww = normalize(target - ro), uu = normalize(cross(ww, vec3(0, 1, 0))), vv = cross(uu, ww), and rd = normalize(uv.x * uu + uv.y * vv + 2.0 * ww). The scene is the closest of a sphere A (centre (-0.9, 0.6, 0), radius 0.6), a sphere B (centre (0.9, 0.45, -0.8), radius 0.45) and the floor, whose distance is p.y. March up to 64 steps with t += d, hit when d < 0.001, give up when t > 40. Take the normal from central differences with eps 0.001. Light direction l = normalize(vec3(0.4, 0.8, 0.5)), diffuse = max(dot(n, l), 0.0). A surface is shaded as albedo * (0.2 + 0.8 * diffuse), with albedo (0.90, 0.30, 0.55) on sphere A, (0.95, 0.80, 0.25) on sphere B and (0.10, 0.12, 0.16) on the floor. The sky is (0.55, 0.70, 0.90), and a miss is the sky. Only the floor reflects. On a floor hit, take rr = reflect(rd, n), start at p + n * 0.01, and march that ray the same way for up to 32 steps, giving up when t > 20. Shade whatever it hits with the same function (no further bounce), or use the sky if it misses. The floor colour is then mix(shaded floor, seen, 0.5).",
   "difficulty": "advanced",
   "track": "raymarching",
-  "tolerance": 50,
+  "tolerance": 4.3,
   "useBlur": true,
   "hintText": "After the first march finds the floor, march again from just above the hit point along reflect(rd, n). Whatever that second ray hits is the reflection. It only needs the same shading, not another bounce. Blend it half and half with the floor's own colour."
 }

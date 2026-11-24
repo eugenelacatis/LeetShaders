@@ -6,7 +6,7 @@
   "difficulty": "expert",
   "track": "capstone",
   "mixes": ["color", "patterns"],
-  "tolerance": 50,
+  "tolerance": 13.7,
   "useBlur": true,
   "hintText": "Check the coordinates first: output fract(tc * vec2(8.0, 1.0)) as red and green and you should see a grid bending down into the center. The tiles are an ordinary brick pattern once you have tc, and the seam at the left is gone when the tile count around is a whole number."
 }

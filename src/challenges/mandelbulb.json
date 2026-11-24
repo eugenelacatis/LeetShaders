@@ -6,7 +6,7 @@
   "difficulty": "expert",
   "track": "capstone",
   "mixes": ["combining", "raymarching"],
-  "tolerance": 50,
+  "tolerance": 5.5,
   "useBlur": true,
   "hintText": "The starter's distance estimator is a plain sphere, so fix the cells in order and check each one. With the triplex power done but the estimator still a sphere, nothing changes yet. Once the estimator iterates, the bulb appears. Cutting a shape out of another is max(a, -b), the subtraction you used on the combining board."
 }

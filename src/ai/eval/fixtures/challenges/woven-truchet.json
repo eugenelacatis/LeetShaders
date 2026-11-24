@@ -5,6 +5,6 @@
   "description": "Weave a rope pattern from three kinds of Truchet tile. The canvas runs from -1 to 1 (aspect-corrected, centred). Scale it by 2.5 to get p, so the frame holds 5 by 5 tiles. Each tile has id = ivec2(floor(p)) and local coordinates f = fract(p) - 0.5. Hash the id with PCG: pcg(v) sets state = v * 747796405u + 2891336453u and word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u, and returns (word >> 22u) ^ word. The tile's kind is pcg(pcg(uint(id.x)) + uint(id.y)) % 3u. Kinds 0 and 1 hold two quarter-circle arcs of radius 0.5, around the corners (0.5, 0.5) and (-0.5, -0.5) for kind 0, or (0.5, -0.5) and (-0.5, 0.5) for kind 1. An arc's distance is abs(length(f - corner) - 0.5). Kind 2 is a crossing: a horizontal strand (distance abs(f.y)) and a vertical one (abs(f.x)). The horizontal strand goes over when id.x + id.y is even, the vertical one when it is odd, and the under strand is drawn first. Draw each strand as a near-black outline (0.03, 0.06, 0.07) out to distance 0.15, then rope out to 0.10, each covered by 1 - smoothstep(-0.01, 0.01, d - width). The background is deep teal (0.05, 0.20, 0.22). The rope is gold (0.85, 0.62, 0.25), lit towards (1.0, 0.92, 0.70) by shine = 1.0 - smoothstep(0.0, 0.12, abs(s - 0.5)) with s = fract((p.x + p.y) * 0.25 - u_time / 12.0), a band that sweeps across every 12 seconds.",
   "difficulty": "expert",
   "track": "patterns",
-  "tolerance": 50,
+  "tolerance": 1.9,
   "useBlur": false
 }

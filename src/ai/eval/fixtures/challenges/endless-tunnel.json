@@ -5,6 +5,6 @@
   "description": "Fly down a tiled tube that never ends. The starter already moves you forward, lights the tube from above and fades the far end into a warm glow; you write three parts. First, the tunnel coordinates: turn each pixel into an angle around the center and a depth into the tube, where depth grows as you get closer to the center. Second, the wall tiles: a staggered grid of rounded tiles in those coordinates, returning how much of the pixel is tile and which row it sits in. Third, the cosine palette that colors each row. Open \"Stuck? Show the numbers\" on any part for the exact radius, tile counts and palette. The walls slide toward you at 0.5 units of depth a second.",
   "difficulty": "expert",
   "track": "capstone",
-  "tolerance": 50,
+  "tolerance": 13.7,
   "useBlur": true
 }

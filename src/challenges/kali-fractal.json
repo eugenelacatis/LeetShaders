@@ -6,7 +6,7 @@
   "difficulty": "expert",
   "track": "capstone",
   "mixes": ["color", "combining"],
-  "tolerance": 50,
+  "tolerance": 19,
   "useBlur": true,
   "hintText": "Start with one fold and a plain trap: color = vec3(exp(-24.0 * abs(length(p) - 0.5))) after a single kaliFold should show soft rings. Then loop. Joining two shapes is min() of their distances, the same union you used on the combining board."
 }

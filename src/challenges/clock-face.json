@@ -5,7 +5,7 @@
   "description": "Draw a clock whose hands turn. The canvas runs from -1 to 1 (aspect-corrected, centred). Angles run clockwise from 12 o'clock, so angle a points along (sin a, cos a). Antialias every shape with 1 - smoothstep(-0.006, 0.006, d) and paint each over the last with mix(), in this order. The background is navy (0.08, 0.09, 0.14), and the face inside radius 0.88 is (0.14, 0.16, 0.24). In ivory (0.92, 0.90, 0.85): a rim ring at radius 0.88 with half-width 0.025; twelve ticks, one every 30 degrees, each a segment from radius 0.74 to 0.80 (from 0.66 for the four at 12, 3, 6 and 9) with half-width 0.015; and a short hand from the centre, length 0.45, half-width 0.04, turning once every 20 seconds. In red (0.90, 0.22, 0.20): a long hand, length 0.72, half-width 0.012, turning once every 5 seconds, then a hub of radius 0.05 on top. At u_time = 0 both hands point to 12.",
   "difficulty": "expert",
   "track": "shapes",
-  "tolerance": 50,
+  "tolerance": 1.5,
   "useBlur": false,
   "hintText": "Every part is a circle, a ring or a line segment. A hand is a segment from the centre to a tip, and the tip is (sin a, cos a) times its length, with a = 6.28318 * u_time / period. Ticks are twelve segments in a loop."
 }

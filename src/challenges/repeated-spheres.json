@@ -5,7 +5,7 @@
   "description": "Raymarch a grid of spheres that runs off into the distance, using domain repetition. The canvas runs from -1 to 1. Camera: ro = (0, 4, 5), looking at (0, 0, 0). Use ww = normalize(target - ro), uu = normalize(cross(ww, vec3(0, 1, 0))), vv = cross(uu, ww), and rd = normalize(uv.x * uu + uv.y * vv + 2.0 * ww). March up to 64 steps with t += d, hit when d < 0.001, give up when t > 40. Before measuring the sphere, fold x and z into one cell: q = p, then q.xz = mod(p.xz + 1.0, 2.0) - 1.0. The sphere has its centre at (0, 0.5, 0) in that folded space and radius 0.4. The scene is the closer of that sphere (measured with q) and the floor, whose distance is p.y (measured with the unfolded p). Take the normal from central differences with eps 0.001. Light direction l = normalize(vec3(0.4, 1.0, 0.3)), diffuse = max(dot(n, l), 0.0). The colour is albedo * (0.15 + 0.85 * diffuse), with albedo (0.93, 0.88, 0.78) on the spheres and (0.18, 0.26, 0.34) on the floor. A miss is (0.04, 0.05, 0.09).",
   "difficulty": "advanced",
   "track": "raymarching",
-  "tolerance": 50,
+  "tolerance": 18.5,
   "useBlur": true,
   "hintText": "mod(p + 1.0, 2.0) - 1.0 maps every point into the cell from -1 to 1 around the nearest grid centre, so one sphere in the cell appears in every cell. Fold only x and z; the floor must still use the real height. Then compute the normal from the full scene, as usual."
 }

@@ -12,7 +12,7 @@ This is a fork of an old class project. I wanted to expand upon it to fill the g
 
 ### Challenges
 
-The bank has 50 challenges (16 beginner, 21 intermediate, 13 advanced), each tagged with a track: color, shapes, combining, patterns, noise, raymarching, or capstone. The list page lays them out as a circuit board in path order, with a live thumbnail rendered through the shared pipeline for every key. The challenge page shows your render, the reference, and their difference, and a verdict sticker reports Matched, Not yet, or Not judged. Capstone challenges give a starter scene and ask you to fill in code cells. The landing page has a "how it works" section that explains the judge.
+The bank has 64 challenges (16 beginner, 21 intermediate, 17 advanced, 10 expert), each tagged with a track: color, shapes, combining, patterns, noise, raymarching, or capstone. The list page lays them out as a circuit board in path order, with a live thumbnail rendered through the shared pipeline for every key. The challenge page shows your render, the reference, and their difference, and a verdict sticker reports Matched, Not yet, or Not judged. Capstone challenges give a starter scene and ask you to fill in code cells. The landing page has a "how it works" section that explains the judge.
 
 Each challenge is a `.glsl` reference, a `.json` file with metadata and a calibrated tolerance, and a `.md` file with the intended solution. Reference shaders and the live preview run through one WebGL2 pipeline, so what you see is what the judge scores.
 
@@ -28,7 +28,7 @@ LLM results are cached by challenge and shader hash, and the API key stays in a 
 
 ### Judge eval
 
-`src/ai/eval/` measures that exact pipeline in headless Chromium against 2,000 fixtures: correct, almost-correct, wrong, and adversarial shaders, 10 per category for each of the 50 challenges, split 1,500 tuning / 500 held out. Per-challenge tolerances and the routing bands are derived from the tuning set; the method and numbers are in [`src/ai/eval/CALIBRATION.md`](src/ai/eval/CALIBRATION.md).
+`src/ai/eval/` measures that exact pipeline in headless Chromium against 2,560 fixtures: correct, almost-correct, wrong, and adversarial shaders, 10 per category for each of the 64 challenges, split 1,920 tuning / 640 held out. Per-challenge tolerances and the routing bands are derived from the tuning set; the method and numbers are in [`src/ai/eval/CALIBRATION.md`](src/ai/eval/CALIBRATION.md).
 
 ## Tech Stack
 

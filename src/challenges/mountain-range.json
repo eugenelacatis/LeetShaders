@@ -6,7 +6,7 @@
   "difficulty": "expert",
   "track": "capstone",
   "mixes": ["noise", "raymarching"],
-  "tolerance": 50,
+  "tolerance": 16.7,
   "useBlur": true,
   "hintText": "Get each part right on its own first. To check the noise before writing fBm, have terrain return 2.0 * noise(p * 0.35) for a moment: you should see soft round hills. Then build the octaves. The normal comes last: compare the height a small step either side in x and in z."
 }
